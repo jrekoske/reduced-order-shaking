@@ -1,0 +1,41 @@
+setup_dir: 'setup'  # setup directory
+source_dir: 'source_files'  # source file directory
+sample_method: 'halton'  # Valid sample_method values: even, random, halton
+n: 10  # Number of simulations (for use with "random" and "halton" sample_methods)
+params_setup_file: 'params-setup.csv'
+sim_job_file: 'sim_job'
+par_file: 'parameters.par'
+source_params: # Constant source parameters to use for all simulations
+  lon: 0
+  lat: 0
+  tini: 0
+  slip1_cm: 100
+  slip2_cm: 0
+  slip3_cm: 0
+remote_dir: 'supermuc_dir' # For automatically copying files to supermuc
+move_to_supermuc: True  
+
+# Values for determining number of job files
+t_sim: 0.2  # Time (hours) per simulation
+t_max: 48   # Max wall time (hours) of a job on supermuc
+
+rom_dir_rbf: 'output-rom' # Folder for saving rbf results
+params: ['depth', 'strike', 'dip', 'rake'] # List of parameters to build rom
+
+# Area of interest
+xmin: -35e3 
+xmax: 35e3
+ymin: -35e3
+ymax: 35e3
+
+# whether to compute log(IMT) before building rom
+use_log: True
+
+# Write out RIC and other measures
+verbose: False
+
+rom_dir_ml: output-rom-ml  # Folder for saving ML results
+plot_sims: [90, 91, 92]  # which simulations to make plots for
+alg_list: ['NN', 'KNN', 'DT']  # List of ML algorithms
+vmin: -3  # colorbar controls
+vmax: 0
