@@ -4,12 +4,13 @@ import logging
 import numpy as np
 import pandas as pd
 from scipy.stats import qmc
-from voronoi import voronoi_sample
-from reduced_order_model import ReducedOrderModel
+
+from romshake.sample import voronoi
+from romshake.core.reduced_order_model import ReducedOrderModel
 
 
 class NumericalRomBuilder():
-    def __init__(self, folder, forward_model_mod, n_seeds_initial,
+    def __init__(self, folder, simulator, n_seeds_initial,
                  n_seeds_refine,
                  n_seeds_stop, samp_method,
                  bounds,
@@ -20,7 +21,7 @@ class NumericalRomBuilder():
 
         Args:
             folder (str): Path associated with ROM data.
-            forward_model_modtion (func): Function for generating
+            simulator (object): Simulator for generating
                 new data from parameters. Can be either analytic or launch
                 numerical simulation jobs.
             n_seeds_initial (int): Number of seeds for the first iteration.
@@ -43,7 +44,7 @@ class NumericalRomBuilder():
         """
 
         self.folder = folder
-        self.forward_model_mod = forward_model_mod
+        self.simulator = simulator
         self.n_seeds_initial = n_seeds_initial
         self.n_seeds_refine = n_seeds_refine
         self.n_seeds_stop = n_seeds_stop
@@ -78,9 +79,9 @@ class NumericalRomBuilder():
             initial_indices = [
                 idx for idx in initial_indices if not idx.startswith('.')]
             initial_indices.sort()
-            successful_indices = self.forward_model_mod.get_successful_indices(
+            successful_indices = self.simulator.get_successful_indices(
                 folder, initial_indices)
-            initial_params, initial_data = forward_model_mod.load_data(
+            initial_params, initial_data = simulator.load_data(
                 folder, successful_indices)
 
         # Create ROM from the initial data/parameters
@@ -117,7 +118,7 @@ class NumericalRomBuilder():
                 n=n_samps), min_vals, max_vals)
         else:
             kf_errors, _ = self.rom.get_kfold_errors(self.k_val)
-            samples = voronoi_sample(
+            samples = voronoi.voronoi_sample(
                 self.rom.P, min_vals, max_vals, kf_errors, sampling_method,
                 n_samps)
 
@@ -158,7 +159,7 @@ class NumericalRomBuilder():
         """
         logging.info(
             'Running forward models for simulation indices %s' % indices)
-        return self.forward_model_mod.evaluate(
+        return self.simulator.evaluate(
             self, params, indices, self.folder)
 
     def train(self):

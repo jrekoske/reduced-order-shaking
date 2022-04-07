@@ -35,7 +35,7 @@ class ReducedOrderModel():
         """Computes the SVD of the data.
         """
         logging.info('Performing SVD.')
-        self.u, self.s, self.vh = np.linalg.svd(self.Q)
+        self.u, self.s, self.vh = np.linalg.svd(self.Q, full_matrices=False)
         if self.rank:
             self.u_rank = self.u[:, 0:self.rank]
         else:
@@ -132,5 +132,5 @@ class ReducedOrderModel():
         kf_error_means = {
             interp_name: np.mean(kf_errors[interp_name])
             for interp_name in kf_errors.keys()}
-        logging.info('ROM errors:', kf_error_means)
+        # logging.info('ROM errors: %s' % kf_error_means)
         return kf_errors, kf_error_means

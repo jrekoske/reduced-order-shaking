@@ -4,8 +4,8 @@ import matplotlib as mpl
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 from scipy.spatial import Voronoi
-from shapely.geometry import Point
-from shapely.geometry.polygon import Polygon
+# from shapely.geometry import Point
+# from shapely.geometry.polygon import Polygon
 
 eps = sys.float_info.epsilon
 
@@ -26,9 +26,6 @@ def voronoi_sample(points, min_vals, max_vals, kf_errors, method,
         (pvertices.T[1] >= (0 - eps)) & (pvertices.T[1] <= (1 + eps))]
     pvertices = np.vstack(
         [np.clip(pvertices.T[idim], 1e-3, 1-1e-3) for idim in range(dim)]).T
-
-    print(pvertices)
-    print(pvertices.shape)
 
     if method == 'voronoi_vertex':
         chosen_points_norm = pvertices
