@@ -1,4 +1,3 @@
-import os
 import noise
 import warnings
 import numpy as np
@@ -7,7 +6,6 @@ from openquake.hazardlib.gsim.abrahamson_2014 import AbrahamsonEtAl2014
 from openquake.hazardlib.contexts import SitesContext, DistancesContext
 from openquake.hazardlib.imt import PGV
 from openquake.hazardlib.const import StdDev
-import pandas as pd
 
 from shakelib.rupture.quad_rupture import QuadRupture
 from shakelib.rupture.origin import Origin
@@ -16,41 +14,42 @@ warnings.filterwarnings('ignore')
 
 N = 30
 shape = (N, N)
-
-par_csv_file = 'parameters.csv'
-
-source_params = {
+default_source_params = {
     'depth': 0,
     'strike': 0,
-    'length': 10,
-    'width': 10,
+    'length': 20,
+    'width': 20,
     'dip': 90
 }
+gmpe = AbrahamsonEtAl2014()
 
 
 class GMPE_Simulator():
-    def __init__(self, add_noise=True):
+    def __init__(self, add_noise):
         self.add_noise = add_noise
 
-    def evaluate(self, rb, params, indices=None, folder=None, write=True):
-        gmpe = AbrahamsonEtAl2014()
+    def evaluate(
+            self, params_dict, **kwargs):
         sx = SitesContext()
         dx = DistancesContext()
 
+        nquakes = len(list(params_dict.values())[0])
+        source_params = {}
+        for param, default_val in default_source_params.items():
+            if param in params_dict:
+                source_params[param] = params_dict[param]
+            else:
+                source_params[param] = np.full(nquakes, default_val)
         all_data = []
-        for i, param in enumerate(params):
-            if indices:
-                idx = indices[i]
-            param_labels = rb.bounds.keys()
-            for label, val in zip(param_labels, param):
-                source_params[label] = val
+
+        for i in range(nquakes):
             origin = Origin({
                 'id': '',
                 'netid': '',
                 'network': '',
                 'lat': 0,
                 'lon': 0,
-                'depth': source_params['depth'],
+                'depth': source_params['depth'][i],
                 'locstring': '',
                 'mag': 6.0,
                 'time': '',
@@ -61,13 +60,13 @@ class GMPE_Simulator():
             rup = QuadRupture.fromOrientation(
                 px=[0],
                 py=[0],
-                pz=[source_params['depth']],
+                pz=[source_params['depth'][i]],
                 dx=[15],
                 dy=[0],
-                length=[source_params['length']],
-                width=[source_params['width']],
-                strike=[source_params['strike']],
-                dip=[source_params['dip']],
+                length=[source_params['length'][i]],
+                width=[source_params['width'][i]],
+                strike=[source_params['strike'][i]],
+                dip=[source_params['dip'][i]],
                 origin=origin)
 
             lons = np.linspace(-0.5, 0.5, N)
@@ -96,13 +95,7 @@ class GMPE_Simulator():
             res = res.flatten()
             all_data.append(res)
 
-            # Save the result
-            if write:
-                sim_dir = os.path.join(folder, 'data', str(idx))
-                if not os.path.exists(sim_dir):
-                    os.makedirs(sim_dir)
-                np.save(os.path.join(sim_dir, 'result.npy'), res)
-        return params, np.array(all_data).T
+        return np.array(list(params_dict.values())).T, np.array(all_data).T
 
     def get_noise(self, res):
         scale = 100.0
@@ -115,23 +108,8 @@ class GMPE_Simulator():
                 world[i][j] = noise.pnoise2(
                     i/scale, j/scale, octaves=octaves, persistence=persistence,
                     lacunarity=lacunarity, repeatx=1024, repeaty=1024, base=42)
-        scale = 0.3 * res.max() / world.max()
+        scale = 0.5 * res.max() / world.max()
         return scale * world
 
-    def load_data(self, folder, indices):
-        df = pd.read_csv(os.path.join(folder, par_csv_file), index_col=0)
-        df = df.iloc[indices]
-        params = df.values
-        all_data = []
-        for idx in indices:
-            res = np.load(os.path.join(folder, 'data', str(idx), 'result.npy'))
-            all_data.append(res)
-        return params, np.array(all_data).T
-
     def get_successful_indices(self, folder, indices):
-        good_indices = []
-        for idx in indices:
-            if os.path.exists(os.path.join(
-                    folder, 'data', str(idx), 'result.npy')):
-                good_indices.append(idx)
-        return good_indices
+        return indices

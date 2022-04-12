@@ -11,13 +11,11 @@ eps = sys.float_info.epsilon
 
 
 def voronoi_sample(points, min_vals, max_vals, kf_errors, method,
-                   n_samples_refine):
-
-    print('method:', method)
-    print('nsamples:', n_samples_refine)
+                   n_samples_refine, kval_refine, interp_refine, plot=False):
     dim = points.shape[1]
     points_norm = (points - min_vals) / (max_vals - min_vals)
     vor = bounded_voronoi(points_norm)
+    kf_errors = kf_errors[kval_refine][interp_refine]
     pvertices = vor.vertices[
         vor.filtered_regions[np.argmax(kf_errors)]]
     pvertices = pvertices[
@@ -48,6 +46,12 @@ def voronoi_sample(points, min_vals, max_vals, kf_errors, method,
     #     chosen_points_norm = np.array(chosen_points_norm)
 
     points = chosen_points_norm * (max_vals - min_vals) + min_vals
+
+    if plot:
+        plot_voronoi_diagram(
+            vor, points_norm, kf_errors, chosen_points_norm, 'vor_%s.png' %
+            points_norm.shape[0])
+
     return points
 
 

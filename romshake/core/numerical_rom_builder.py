@@ -8,15 +8,17 @@ from scipy.stats import qmc
 from romshake.sample import voronoi
 from romshake.core.reduced_order_model import ReducedOrderModel
 
+FNAME = 'rom_builder.pkl'
+
 
 class NumericalRomBuilder():
     def __init__(self, folder, simulator, n_seeds_initial,
                  n_seeds_refine,
                  n_seeds_stop, samp_method,
                  bounds,
-                 rank=None, update_basis=False,
-                 ml_regressors=[], ml_names=[], rbf_kernels=[],
-                 k_val=5):
+                 ranks=[], update_basis=False,
+                 ml_regressors={}, rbf_kernels=[],
+                 k_val=5, vor_kval_refine=None, vor_interp_refine=None):
         """Class for building reduced-order models from numerical simulations.
 
         Args:
@@ -33,14 +35,17 @@ class NumericalRomBuilder():
             rank (int, optional): Rank of the basis. Defaults to None.
             update_basis (bool, optional): Whether to update the basis with
                 each iteration. Defaults to False.
-            ml_regressors (list, optional): Scikit-learn ML regressors.
-                Defaults to [].
-            ml_names (list, option): List of strings for ML names.
-                Defaults to [].
+            ml_regressors (dict, optional): Scikit-learn ML regressors.
+                The keys are strings identifying the regressors and
+                the values are Scikit learn regressors. Defaults to None.
             rbf_kernels (list, optional): List of scipy rbf kernels (strings).
                 Defaults to [].
-            k_val (_type_, optional): k value for k-fold errors.
+            k_val (int, optional): k value for k-fold errors.
                 Defaults to None.
+            vor_kval_refine (int, optional): k-value for Voronoi refinement.
+                Defaults to None.
+            vor_interp_refine (str, optional): interpolator (string) for
+                Voronoi refinement. Defaults to None.
         """
 
         self.folder = folder
@@ -50,18 +55,23 @@ class NumericalRomBuilder():
         self.n_seeds_stop = n_seeds_stop
         self.samp_method = samp_method
         self.bounds = bounds
-        self.rank = rank
+        self.ranks = ranks
         self.update_basis = update_basis
         self.ml_regressors = ml_regressors
-        self.ml_names = ml_names
         self.rbf_kernels = rbf_kernels
         self.k_val = k_val
+        self.vor_kval_refine = vor_kval_refine
+        self.vor_interp_refine = vor_interp_refine
 
         self.dim = len(self.bounds.keys())
         self.halton_sampler = qmc.Halton(d=self.dim, seed=0)
 
         if not os.path.exists(folder):
             os.makedirs(folder)
+        else:
+            raise ValueError(
+                'A ROM builder has already been started in the folder %s.'
+                ' You should load that instead.' % folder)
 
         # Set up the logging file
         logfile = os.path.join(folder, 'output.log')
@@ -69,35 +79,30 @@ class NumericalRomBuilder():
             filename=logfile, level=logging.DEBUG,
             format='%(asctime)s %(message)s')
 
-        if not os.path.exists(os.path.join(folder, 'data')):
-            initial_params, initial_indices = self.draw_samples(
-                'halton', n_seeds_initial)
-            initial_params, initial_data = self.run_forward_models(
-                initial_params, initial_indices)
-        else:
-            initial_indices = os.listdir(os.path.join(folder, 'data'))
-            initial_indices = [
-                idx for idx in initial_indices if not idx.startswith('.')]
-            initial_indices.sort()
-            successful_indices = self.simulator.get_successful_indices(
-                folder, initial_indices)
-            initial_params, initial_data = simulator.load_data(
-                folder, successful_indices)
+        initial_params, initial_indices = self.draw_samples(
+            'halton', n_seeds_initial)
+        initial_params, initial_data = self.run_forward_models(
+            initial_params, initial_indices)
 
         # Create ROM from the initial data/parameters
         self.rom = ReducedOrderModel(
             initial_params, initial_data,
-            rank, ml_regressors, ml_names, rbf_kernels)
+            ranks, ml_regressors, rbf_kernels)
 
         # Get k-fold errors and store
         _, kf_error_means = self.rom.get_kfold_errors(self.k_val)
-        self.error_history = {
-            interp_name: [kf_error_means[interp_name]]
-            for interp_name in kf_error_means.keys()}
-        self.nsamples_history = [n_seeds_initial]
+        self.error_history = {rank: {
+            interp_name: [kf_error_means[rank][interp_name]]
+            for interp_name in kf_error_means[rank].keys()} for rank in ranks}
+        self.nsamples_history = [self.rom.P.shape[0]]
 
         # Iteratively update the reduced order model
         self.train()
+
+    @classmethod
+    def from_folder(cls, folder):
+        with open(os.path.join(folder, FNAME), 'rb') as f:
+            return pickle.load(f)
 
     def draw_samples(self, sampling_method, n_samps=None):
         """Draws new samples to feed into the reduced order model.
@@ -120,7 +125,7 @@ class NumericalRomBuilder():
             kf_errors, _ = self.rom.get_kfold_errors(self.k_val)
             samples = voronoi.voronoi_sample(
                 self.rom.P, min_vals, max_vals, kf_errors, sampling_method,
-                n_samps)
+                n_samps, self.vor_kval_refine, self.vor_interp_refine)
 
         # Discard any samples that we already have run.
         if hasattr(self, 'rom'):
@@ -128,20 +133,16 @@ class NumericalRomBuilder():
                 sample.tolist() not in self.rom.P.tolist()
                 for sample in samples]
             samples = samples[new_samples_idxs]
-
         logging.info('Drew %s new samples.' % len(samples))
 
-        # Add new samples to the CSV file
-        df_path = os.path.join(self.folder, 'parameters.csv')
+        # Store samples in a dataframe
         newdf = pd.DataFrame(samples, columns=list(self.bounds.keys()))
-        if os.path.exists(df_path):
-            old_df = pd.read_csv(df_path, index_col=0)
-            start_idx = max(old_df.index) + 1
-            df = pd.concat([old_df, newdf]).reset_index(drop=True)
+        if hasattr(self, 'df'):
+            start_idx = max(self.df.index) + 1
+            self.df = pd.concat([self.df, newdf]).reset_index(drop=True)
         else:
-            df = newdf
+            self.df = newdf
             start_idx = 0
-        df.to_csv(df_path)
         indices = list(range(start_idx, start_idx + samples.shape[0]))
         return samples, indices
 
@@ -159,8 +160,11 @@ class NumericalRomBuilder():
         """
         logging.info(
             'Running forward models for simulation indices %s' % indices)
+
+        labels = list(self.bounds.keys())
+        params_dict = {label: param for label, param in zip(labels, params.T)}
         return self.simulator.evaluate(
-            self, params, indices, self.folder)
+            params_dict, indices=indices, folder=self.folder)
 
     def train(self):
         """Run the training loop to build the reduced order model.
@@ -174,14 +178,18 @@ class NumericalRomBuilder():
                 new_params, new_indices)
             self.rom.update(new_params, new_data, self.update_basis)
             _, kf_error_means = self.rom.get_kfold_errors(self.k_val)
-            for interp_name in kf_error_means.keys():
-                self.error_history[interp_name].append(
-                    kf_error_means[interp_name])
+
+            for rank in kf_error_means.keys():
+                for interp_name in kf_error_means[rank].keys():
+                    self.error_history[rank][interp_name].append(
+                        kf_error_means[rank][interp_name])
+
             self.nsamples_history.append(self.rom.P.shape[0])
+
+            # Save the updated ROM builder
+            with open(os.path.join(self.folder, FNAME), 'wb') as outp:
+                pickle.dump(self, outp)
+
         logging.info(
             'Finished training the ROM. Ended with %s simulations.' %
             self.rom.P.shape[0])
-
-        # Save the trained ROM with pickle
-        with open(os.path.join(self.folder, 'rom.pkl'), 'wb') as outp:
-            pickle.dump(self.rom, outp)

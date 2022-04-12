@@ -1,3 +1,4 @@
+import inspect
 import os
 import time
 import h5py
@@ -5,22 +6,20 @@ import shutil
 import logging
 import subprocess
 import numpy as np
-import pandas as pd
 
 from romshake.simulators.reorder_elements import run_reordering
 
 imt = 'PGV'
 mask_file = 'mask.npy'
-par_csv_file = 'parameters.csv'
 h5_gm_cor_file = 'loh1-GME_corrected.h5'
 remote_dir = 'di46bak@skx.supermuc.lrz.de:/hppfs/scratch/0B/di46bak/'
-sleepy_time = 5 * 60  # (5 minutes)
+sleepy_time = 1 * 60  # (5 minutes)
 
 
 class SeisSolSimulator():
     def __init__(self, par_file, sim_job_file, mesh_file, material_file,
                  max_jobs, t_per_sim, t_max_per_job, take_log_imt,
-                 mask_bounds):
+                 mask_bounds, netcdf_files=[]):
         self.par_file = par_file
         self.sim_job_file = sim_job_file
         self.mesh_file = mesh_file
@@ -30,12 +29,10 @@ class SeisSolSimulator():
         self.t_max_per_job = t_max_per_job
         self.take_log_imt = take_log_imt
         self.mask_bounds = mask_bounds
+        self.netcdf_files = netcdf_files
 
     def load_data(self, folder, indices):
         logging.info('Loading data.')
-        df = pd.read_csv(os.path.join(folder, par_csv_file), index_col=0)
-        df = df.iloc[indices]
-        params = df.values
         all_data = []
         mask_path = os.path.join(folder, mask_file)
         if os.path.exists(mask_path):
@@ -49,7 +46,7 @@ class SeisSolSimulator():
             if self.take_log_imt:
                 data = np.log(data)
             all_data.append(data)
-        return params, np.array(all_data).T
+        return np.array(all_data).T
 
     def make_mask(self, folder, mask_path):
         logging.info('Creating mask.')
@@ -72,21 +69,20 @@ class SeisSolSimulator():
         np.save(mask_path, elem_mask)
         return elem_mask
 
-    def evaluate(self, rb, params, indices, folder):
+    def evaluate(self, params_dict, indices, folder, **kwargs):
         self.prepare_common_files(folder)
         source_params = {
             'M': 6.0,
-            'lon': 0.0,
-            'lat': 0.0,
+            'lon': -117.9437,
+            'lat': 34.1122,
             'tini': 0.0,
             'slip1_cm': 100.0,
             'slip2_cm': 0.0,
             'slip3_cm': 0.0}
-        for param, sim_idx in zip(params, indices):
-            sim_params = {
-                param_key: param[i]
-                for i, param_key in enumerate(rb.bounds.keys())}
-            source_params = {**source_params, **sim_params}
+        for i, sim_idx in enumerate(indices):
+            for param_label, param_vals in params_dict.items():
+                source_params[param_label] = param_vals[i]
+            print(source_params)
             self.write_source_files(folder, source_params, sim_idx)
         self.prepare_jobs(folder, indices)
         self.sync_files(folder, remote_dir, False)
@@ -94,7 +90,13 @@ class SeisSolSimulator():
         self.sync_files('%s/%s/' % (remote_dir, folder), folder, True)
         successful_indices = self.get_successful_indices(folder, indices)
         self.reorder_elements(folder, successful_indices)
-        return self.load_data(folder, successful_indices)
+
+        params_arr = np.array(list(params_dict.values())).T
+        good_params = np.array(
+            [param for param, idx in zip(params_arr, indices)
+             if idx in successful_indices])
+
+        return good_params, self.load_data(folder, successful_indices)
 
     def write_source_files(self, folder, source_params, sim_idx):
         logging.info('Writing source files for simulation index %s' % sim_idx)
@@ -110,8 +112,8 @@ class SeisSolSimulator():
 
         subprocess.call(
             ['/bin/zsh', '-i', '-c', (
-                'rconv -i %s -m "+proj=lonlat +datum=WGS84 +units=m'
-                ' +axis=ned" -o %s') % (srf_fname, nrf_fname)])
+                'rconv -i %s -m "+proj=utm +zone=11 +ellps=WGS84 +datum=WGS84'
+                ' +units=m +no_defs" -o %s') % (srf_fname, nrf_fname)])
 
         shutil.copyfile(
             os.path.join(folder, self.par_file),
@@ -147,7 +149,7 @@ class SeisSolSimulator():
                 data.append('\ncd %s' % sim_idx)
                 data.append(
                     ('\nmpiexec -n $SLURM_NTASKS '
-                     'SeisSol_Release_sskx_4_elastic %s' % self.par_file))
+                     'SeisSol_Release_dskx_5_elastic %s' % self.par_file))
                 data.append((
                     '\nmpiexec -n $SLURM_NTASKS python -u '
                     '/dss/dsshome1/0B/di46bak/'
@@ -161,12 +163,15 @@ class SeisSolSimulator():
         logging.info('Created %s job files.' % njobs)
 
     def sync_files(self, source, dest, exclude_output):
+        exclude_file = os.path.join(
+            os.path.split(inspect.getfile(self.__class__))[0], 'exclude.txt')
         logging.info('Syncing files. Source: %s, Destination: %s' % (
             source, dest))
-        cmd = 'rsync -a %s %s --delete --progress' % (source, dest)
+        cmd = ("rsync -a %s %s --delete --progress "
+               "--exclude-from=%s" % (source, dest, exclude_file))
         if exclude_output:
             cmd += ' --exclude output/'
-        print(cmd)
+        print('command:', cmd)
         while True:
             res = subprocess.call(cmd.split())
             if res == 0:
@@ -236,7 +241,8 @@ class SeisSolSimulator():
             data = data.replace('mesh_file_name', self.mesh_file)
         with open(os.path.join(folder, self.par_file), 'wt') as f:
             f.write(data)
-        for file in [self.mesh_file, self.material_file, self.sim_job_file]:
+        for file in self.netcdf_files + [
+                self.mesh_file, self.material_file, self.sim_job_file]:
             shutil.copyfile(file, os.path.join(folder, file))
 
     def get_ref_idx(self, folder):
@@ -268,7 +274,7 @@ class SeisSolSimulator():
         fout = open(fname, 'w')
         fout.write('1.0\n')
         fout.write('POINTS 1\n')
-        fout.write("%f %f %f %f %f %.10e %f %f\n" %
+        fout.write("%.5e %.5e %f %f %f %.10e %f %f\n" %
                    (lon, lat, depth, strike, dip, area, tini, dt))
         fout.write("%f %f %d %f %d %f %d\n" %
                    (rake, slip1_cm, nt1, slip2_cm, nt2, slip3_cm, nt3))
