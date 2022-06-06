@@ -1,149 +1,122 @@
+import os
+import shutil
 import logging
 import numpy as np
+from joblib import Memory
+import pandas as pd
 from sklearn import preprocessing
-from scipy.interpolate import RBFInterpolator
-from sklearn.model_selection import KFold
-from sklearn.base import clone
+from sklearn.pipeline import Pipeline
+from sklearn.decomposition import TruncatedSVD
+from sklearn.model_selection import GridSearchCV
+from sklearn.preprocessing import StandardScaler
+from sklearn.compose import TransformedTargetRegressor
+from sklearn.model_selection import train_test_split
+
+from sklearn.tree import DecisionTreeRegressor  # NOQA
+from sklearn.neural_network import MLPRegressor  # NOQA
+from sklearn.neighbors import KNeighborsRegressor  # NOQA
+from romshake.core.rbf_regressor import RBFRegressor  # NOQA
+
+from romshake.simulators.remote import REMOTE_DIR, copy_file, run_jobs
 
 
 class ReducedOrderModel():
-    def __init__(self, P, Q, ranks, ml_regressors, rbf_kernels):
-        """Class for encapusaling reduced order model information.
+    def __init__(
+            self, regressors, svd_ncomps, test_size, scoring,
+            remote_grid_search=None, folder=None, grid_search_job_file=None,
+            grid_search_script=None):
+        """Class for encapsulating reduced order model information.
 
         Args:
-            P (array): Parameter array.
-            Q (array): Data array.
-            rank (int): Ranks of the POD basis.
-            ml_regressors (dict, optional): Scikit-learn ML regressors.
-                The keys are strings identifying the regressors and
-                the values are Scikit learn regressors. Defaults to None.
-            rbf_kernels (list): List of rbf kernels (strings).
-                Must be a valid kernel to use with
-                scipy.interpolate.RBFInterpolator.
+            parameters (dict, optional): Dictionary of parameters
+                for grid search of ML hyperparameters.
+            test_size (float): Fraction of data (forward models) to
+                holdout from training.
+            scoring (str): Scorer string (scikit-learn).
         """
-        self.P = P
-        self.Q = Q
-        self.ranks = ranks
-        self.ml_regressors = ml_regressors
-        self.rbf_kernels = rbf_kernels
+        self.hyper_params = []
+        for rname, hypers in regressors.items():
+            rdict = {'regressor__reg': [globals()[rname](**hypers)]}
+            for hyp_name, hyp_val in hypers.items():
+                rdict['regressor__reg__%s' % hyp_name] = hyp_val
+            rdict['transformer__svd__n_components'] = svd_ncomps
+            self.hyper_params.append(rdict)
+        self.test_size = test_size
+        self.scoring = scoring
+        self.remote_grid_search = remote_grid_search
+        self.folder = folder
+        self.grid_search_job_file = grid_search_job_file
+        self.grid_search_script = grid_search_script
 
-        self.compute_svd()
-        self.compute_pod_coefficients()
-        self.fit_interpolators()
-
-    def compute_svd(self):
-        """Computes the SVD of the data.
-        """
-        logging.info('Performing SVD.')
-        self.u, self.s, self.vh = np.linalg.svd(self.Q, full_matrices=False)
-
-    def compute_pod_coefficients(self):
-        """Computes the POD coefficients and standardizes the inputs and
-        outputs for training.
-        """
-        logging.info('Computing POD coefficients.')
-        self.A = {rank: self.Q.T @ self.u[:, 0:rank] for rank in self.ranks}
-
-        self.Pscaler = preprocessing.StandardScaler().fit(self.P)
-        self.P_scaled = self.Pscaler.transform(self.P)
-
-        self.Ascalers = {
-            rank: preprocessing.StandardScaler().fit(self.A[rank])
-            for rank in self.ranks}
-        self.A_scaled = {
-            rank: self.Ascalers[rank].transform(self.A[rank])
-            for rank in self.ranks}
-
-    def fit_interpolators(self):
-        """Fits the interpolators (rbf kernels and machine learning-based
-        interpolators."""
-        self.interpolators = {}
-        for rank in self.ranks:
-            self.interpolators[rank] = {}
-            for ml_name, ml_regr in self.ml_regressors.items():
-                new_regr = clone(ml_regr)
-                self.interpolators[rank][ml_name] = new_regr.fit(
-                    self.P_scaled, self.A_scaled[rank])
-            for kernel in self.rbf_kernels:
-                self.interpolators[rank][kernel] = RBFInterpolator(
-                    self.P_scaled, self.A_scaled[rank], kernel=kernel)
-
-    def update(self, newP, newQ, update_basis):
+    def update(self, newX, newy):
         """Updates an existing reduced order model with new parameters/data.
 
         Args:
-            newP (array): New parameter array.
-            newQ (array): New data array.
-            update_basis (bool): Whether to update the POD basis with newly
-                added data.
+            newX (array): New parameter array.
+            newy (array): New data array.
         """
         logging.info(
-            'Updating the reduced order model with %s new simulations.' %
-            newP.shape[0])
-        self.P = np.concatenate((self.P, newP), axis=0)
-        self.Q = np.concatenate((self.Q, newQ), axis=1)
-        if update_basis:
-            self.compute_svd()
-        self.compute_pod_coefficients()
-        self.fit_interpolators()
+            'Adding %s new simulations to the reduced order model.' %
+            newX.shape[0])
+        if hasattr(self, 'X'):
+            self.X = np.concatenate((self.X, newX))
+            self.y = np.concatenate((self.y, newy))
+        else:
+            self.X = newX
+            self.y = newy
+        if self.remote_grid_search:
+            self.launch_remote_grid_search()
+        else:
+            self.train_search_models()
 
-    def predict(self, Ppred):
-        """Predicts the output data using the reduced order model.
+    def train_search_models(self):
+        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
+            self.X, self.y, test_size=self.test_size)
+        regressor = Pipeline(
+            steps=[('scaler', StandardScaler()), ('reg', RBFRegressor())])
+        location = 'cachedir'
+        memory = Memory(location=location, verbose=10)
+        transformer = Pipeline([
+            ('svd', TruncatedSVD()),
+            ('yscaler', preprocessing.StandardScaler())], memory=memory)
+        trans_regr = TransformedTargetRegressor(
+            regressor=regressor, transformer=transformer, check_inverse=False)
+        print(self.hyper_params)
+        search = GridSearchCV(trans_regr, self.hyper_params, verbose=4,
+                              n_jobs=-1, scoring=self.scoring)
+        logging.info('Starting grid search of model hyperparameters.')
+        search.fit(self.X_train, self.y_train)
+        logging.info('The best parameters are: %s' % search.best_params_)
+        logging.info('The best score is: %s' % search.best_score_)
+        test_score = search.score(self.X_test, self.y_test)
+        logging.info('The score on the testing data is: %s' % test_score)
+        self.y_pred = search.predict(self.X_test)
+        self.search = search
 
-        Args:
-            Ppred (array): Array of prediction parameters.
+        # Delete the temporary cache directory
+        memory.clear(warn=False)
+        shutil.rmtree(location)
 
-        Returns:
-            dict: Dictionary of predictions where the keys indicate the
-                interpolator and the values are the output predictions.
+    def launch_remote_grid_search(self):
+        job_dir = os.path.join(self.folder, 'jobs')
+        if os.path.exists(job_dir):
+            jobfiles = [file for file in os.listdir(job_dir) if 'job' in file]
+            jobidx = max([int(file[-1]) for file in jobfiles]) + 1
+        else:
+            os.makedirs(job_dir)
+            jobidx = 0
+        remote_job_file_loc = os.path.join(
+            REMOTE_DIR, self.folder, 'jobs', 'job%s' % jobidx)
+        copy_file(self.grid_search_job_file, remote_job_file_loc)
+        copy_file(self.grid_search_script, os.path.join(
+            REMOTE_DIR, self.folder))
+        run_jobs([jobidx], self.folder)
 
-        """
-        Ppred_trans = self.Pscaler.transform(Ppred)
-        Qpred = {}
-        for rank in self.ranks:
-            Qpred[rank] = {}
-            for interp_name, interp in self.interpolators[rank].items():
-                try:
-                    Apred = interp.predict(Ppred_trans)
-                except AttributeError:
-                    Apred = interp(Ppred_trans)
+        files_to_copy = ['X.npy', 'ypred.npy', 'grid_search_results.csv']
+        for file in files_to_copy:
+            copy_file(os.path.join(REMOTE_DIR, self.folder, file), self.folder)
 
-                self.Ascalers[rank].inverse_transform(Apred).T
-                Qpred[rank][interp_name] = self.u[:, 0:rank] @ self.Ascalers[
-                    rank].inverse_transform(Apred).T
-        return Qpred
-
-    def get_kfold_errors(self, kval):
-        """Peforms k-fold cross-validation on the reduced order model.
-
-        Args:
-            kval (int): k-value.
-
-        Returns:
-            tuple: Tuple of dictionaries. First contains the interpolators
-            as the keys and the list of errors as the values. Second contains
-            the interpolators as keys and the mean of errors as the values.
-        """
-        logging.info('Obtaining kfold errors.')
-        npoints = self.P.shape[0]
-        if kval == 'loo':
-            kval = npoints
-        interp_names = list(self.ml_regressors.keys()) + self.rbf_kernels
-        kf = KFold(n_splits=kval, shuffle=True)
-        kf_errors = {rank: {interp_name: np.zeros(
-            npoints) for interp_name in interp_names} for rank in self.ranks}
-        for train, test in kf.split(self.P):
-            rom = ReducedOrderModel(
-                self.P[train], self.Q[:, train], self.ranks,
-                self.ml_regressors, self.rbf_kernels)
-            pred_dict = rom.predict(self.P[test])
-            true = self.Q[:, test]
-            for rank in self.ranks:
-                for interp_name, pred_vals in pred_dict[rank].items():
-                    kf_errors[rank][interp_name][test] = np.linalg.norm(
-                        pred_vals - true, axis=0) / np.linalg.norm(
-                            true, axis=0)
-        kf_error_means = {rank: {
-            interp_name: np.mean(kf_errors[rank][interp_name])
-            for interp_name in kf_errors[rank].keys()} for rank in self.ranks}
-        return kf_errors, kf_error_means
+        X = np.load(os.path.join(self.folder, 'X.npy'))
+        ypred = np.load(os.path.join(self.folder, 'ypred.npy'))
+        search_df = pd.read_csv(os.path.join(self.folder, 'grid_search_results.csv'))
+        return (X, ypred, search_df)

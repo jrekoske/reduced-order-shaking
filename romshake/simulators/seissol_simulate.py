@@ -1,35 +1,52 @@
-import inspect
 import os
 import time
 import h5py
 import shutil
+import inspect
 import logging
 import subprocess
 import numpy as np
-
+from matplotlib import pyplot as plt
+from romshake.simulators.remote import (issue_remote_command, SLEEPY_TIME,
+                                        SCRATCH_DIR, REMOTE_DIR, run_jobs)
 from romshake.simulators.reorder_elements import run_reordering
+from scripts.mesh_plot import triplot
 
 imt = 'PGV'
 mask_file = 'mask.npy'
 h5_gm_cor_file = 'loh1-GME_corrected.h5'
-remote_dir = 'di46bak@skx.supermuc.lrz.de:/hppfs/scratch/0B/di46bak/'
-sleepy_time = 1 * 60  # (5 minutes)
+seissol_exe = 'SeisSol_Release_dskx_4_elastic'
+gm_exe = ('/dss/dsshome1/0B/di46bak/SeisSol/postprocessing/science/'
+          'GroundMotionParametersMaps/ComputeGroundMotionParameters'
+          'FromSurfaceOutput_Hybrid.py')
+
+# Turn off excessive logging from Paramiko and matplotlib
+logging.getLogger('paramiko').setLevel(logging.WARNING)
 
 
 class SeisSolSimulator():
-    def __init__(self, par_file, sim_job_file, mesh_file, material_file,
+    def __init__(self, par_file, sim_job_file, prefix,
                  max_jobs, t_per_sim, t_max_per_job, take_log_imt,
-                 mask_bounds, netcdf_files=[]):
+                 mesh_coords, netcdf_files=[], make_mesh_func=None):
         self.par_file = par_file
         self.sim_job_file = sim_job_file
-        self.mesh_file = mesh_file
-        self.material_file = material_file
+        self.prefix = prefix
         self.max_jobs = max_jobs
         self.t_per_sim = t_per_sim
         self.t_max_per_job = t_max_per_job
         self.take_log_imt = take_log_imt
-        self.mask_bounds = mask_bounds
+        self.mesh_coords = mesh_coords
         self.netcdf_files = netcdf_files
+
+        self.puml_mesh_file = '%s.puml.h5' % self.prefix
+        self.material_file = '%s.yaml' % self.prefix
+
+        # Create the mesh if it doesn't exist yet
+        self.gmsh_mesh_file = '%s.msh' % prefix
+        tmp_geo_mesh_file = 'tmp.geo'
+        new_geo_mesh_file = '%s.geo' % prefix
+        if not os.path.exists(self.gmsh_mesh_file):
+            make_mesh_func(tmp_geo_mesh_file, new_geo_mesh_file, mesh_coords)
 
     def load_data(self, folder, indices):
         logging.info('Loading data.')
@@ -53,18 +70,24 @@ class SeisSolSimulator():
         ref_idx = self.get_ref_idx(folder)
         h5f = h5py.File(
             os.path.join(folder, 'data', str(ref_idx), h5_gm_cor_file), 'r')
-
         connect = h5f['connect']
         geom = h5f['geometry']
         imts = list(h5f.keys())
         imts.remove('connect')
         imts.remove('geometry')
         elem_mask = np.zeros(connect.shape[0], dtype=bool)
+        crds = self.mesh_coords
+        xcenter = crds['LL_UTM_E'] + (crds['LX'] / 2)
+        ycenter = crds['LL_UTM_N'] + (crds['LY'] / 2)
+        xmin = xcenter - (crds['AOI_L'] / 2)
+        xmax = xcenter + (crds['AOI_L'] / 2)
+        ymin = ycenter - (crds['AOI_L'] / 2)
+        ymax = ycenter + (crds['AOI_L'] / 2)
+        logging.info('Coordinates of the area of interest: %s %s %s %s ' % (
+            xmin, xmax, ymin, ymax))
         for i, element in enumerate(connect):
             cx, cy, _ = geom[element].mean(axis=0)
-            if (cx >= self.mask_bounds[0] and cx <= self.mask_bounds[1]
-                    and cy >= self.mask_bounds[2]
-                    and cy <= self.mask_bounds[3]):
+            if (cx >= xmin and cx <= xmax and cy >= ymin and cy <= ymax):
                 elem_mask[i] = 1.0
         np.save(mask_path, elem_mask)
         return elem_mask
@@ -82,21 +105,60 @@ class SeisSolSimulator():
         for i, sim_idx in enumerate(indices):
             for param_label, param_vals in params_dict.items():
                 source_params[param_label] = param_vals[i]
-            print(source_params)
             self.write_source_files(folder, source_params, sim_idx)
-        self.prepare_jobs(folder, indices)
-        self.sync_files(folder, remote_dir, False)
-        self.launch_jobs(folder)
-        self.sync_files('%s/%s/' % (remote_dir, folder), folder, True)
-        successful_indices = self.get_successful_indices(folder, indices)
-        self.reorder_elements(folder, successful_indices)
+        job_indices = self.prepare_jobs(folder, indices)
+        self.sync_files(folder, REMOTE_DIR, False)
+        self.make_puml_file(folder)
+        run_jobs(job_indices, folder)
+        # self.launch_jobs(folder, job_indices)
+        # self.sync_files('%s/%s/' % (REMOTE_DIR, folder), folder, True)
+        # successful_indices = self.get_successful_indices(folder, indices)
+        # self.reorder_elements(folder, successful_indices)
 
-        params_arr = np.array(list(params_dict.values())).T
-        good_params = np.array(
-            [param for param, idx in zip(params_arr, indices)
-             if idx in successful_indices])
+        # params_arr = np.array(list(params_dict.values())).T
+        # good_params = np.array(
+            # [param for param, idx in zip(params_arr, indices)
+            #  if idx in successful_indices])
 
-        return good_params, self.load_data(folder, successful_indices)
+        # data = self.load_data(folder, successful_indices)
+        # self.plot_data(successful_indices, data, folder)
+        # return good_params, data
+
+        # Return None values because we don't need to get the data
+        # SuperMUC locally
+        return (None, None)
+
+    def plot_data(self, successful_indices, data, folder):
+        for i in range(len(successful_indices)):
+            idx = successful_indices[i]
+            plotdata = data.T[i]
+            fig, ax = plt.subplots(figsize=(5, 5))
+            h5f = h5py.File(os.path.join(
+                folder, 'data', str(
+                    successful_indices[0]), h5_gm_cor_file), 'r')
+            geom = np.array(h5f['geometry'])
+            connect = np.array(h5f['connect'])
+            nodes = np.array(geom)
+            x, y = nodes[:, 0], nodes[:, 1]
+            mask_path = os.path.join(folder, mask_file)
+            elem_mask = np.load(mask_path)
+            im = triplot(
+                x, y, np.array(connect)[elem_mask],
+                plotdata, ax, edgecolor='face')
+            fig.colorbar(im, label='logPGV')
+            fig_dir = os.path.join(folder, 'figs')
+            if not os.path.exists(fig_dir):
+                os.makedirs(fig_dir)
+            fig.savefig(os.path.join(fig_dir, '%s.png' % idx))
+
+    def make_puml_file(self, folder):
+        wdir = '%s%s' % (SCRATCH_DIR, folder)
+        if self.puml_mesh_file not in str(
+                issue_remote_command('ls %s' % wdir)):
+            logging.info('Running pumgen to create PUML mesh file.')
+            issue_remote_command(
+                'cd %s; pumgen %s -s msh2' % (
+                    wdir, self.gmsh_mesh_file))
 
     def write_source_files(self, folder, source_params, sim_idx):
         logging.info('Writing source files for simulation index %s' % sim_idx)
@@ -122,10 +184,12 @@ class SeisSolSimulator():
     def prepare_jobs(self, folder, indices):
         logging.info('Preparing job files.')
         job_dir = os.path.join(folder, 'jobs')
-        # Start with a clean job directory
         if os.path.exists(job_dir):
-            shutil.rmtree(job_dir)
-        os.makedirs(job_dir)
+            jobfiles = [file for file in os.listdir(job_dir) if 'job' in file]
+            startidx = max([int(file[-1]) for file in jobfiles]) + 1
+        else:
+            os.makedirs(job_dir)
+            startidx = 0
 
         # Calculate number of jobs we should submit
         nsims = len(indices)
@@ -138,29 +202,27 @@ class SeisSolSimulator():
             data_temp = myfile.readlines()
 
         for i in range(njobs):
+            jobidx = str(startidx + i)
             data = data_temp.copy()
             job_run_time = self.t_per_sim * len(sims_groups[i])
             data = [sub.replace(
                 '00:30:00',
                 time.strftime('%H:%M:%S', time.gmtime(job_run_time*3600)))
                 for sub in data]
-
+            data = [sub.replace('jobidx', jobidx) for sub in data]
             for sim_idx in sims_groups[i]:
                 data.append('\ncd %s' % sim_idx)
+                data.append('\nmpiexec -n $SLURM_NTASKS %s %s' % (
+                    seissol_exe, self.par_file))
                 data.append(
-                    ('\nmpiexec -n $SLURM_NTASKS '
-                     'SeisSol_Release_dskx_5_elastic %s' % self.par_file))
-                data.append((
-                    '\nmpiexec -n $SLURM_NTASKS python -u '
-                    '/dss/dsshome1/0B/di46bak/'
-                    'SeisSol/postprocessing/science/'
-                    'GroundMotionParametersMaps/'
-                    'ComputeGroundMotionParametersFromSurfaceOutput_Hybrid.py '
-                    'output/loh1-surface.xdmf'))
+                    ('\nmpiexec -n $SLURM_NTASKS python -u %s'
+                     ' output/loh1-surface.xdmf' % gm_exe))
                 data.append('\ncd ..')
-            with open(os.path.join(job_dir, 'job%s' % i), 'w') as myfile:
+            with open(os.path.join(
+                    job_dir, 'job%s' % jobidx), 'w') as myfile:
                 myfile.writelines(data)
         logging.info('Created %s job files.' % njobs)
+        return range(startidx, startidx + njobs)
 
     def sync_files(self, source, dest, exclude_output):
         exclude_file = os.path.join(
@@ -171,12 +233,11 @@ class SeisSolSimulator():
                "--exclude-from=%s" % (source, dest, exclude_file))
         if exclude_output:
             cmd += ' --exclude output/'
-        print('command:', cmd)
         while True:
             res = subprocess.call(cmd.split())
             if res == 0:
                 break
-            time.sleep(sleepy_time)
+            time.sleep(SLEEPY_TIME)
 
     def get_successful_indices(self, folder, indices):
         files = [
@@ -214,35 +275,15 @@ class SeisSolSimulator():
             os.rename(h5name, h5new)
             os.rename(xdmfname, xdmfnew)
 
-    def launch_jobs(self, folder):
-        logging.info('Launching jobs.')
-        cmd = ('cd $SCRATCH/%s/jobs; for fname in job*; '
-               'do sbatch $fname; done' % folder)
-        res = self.issue_remote_command(
-            self.build_remote_command(cmd)).splitlines()
-        job_ids = [line.split('job ')[1] for line in res]
-
-        # Wait for the jobs to finish, check status using squeue
-        jobs_finished = False
-        logging.info('Waiting for jobs to finish.')
-        while not jobs_finished:
-            time.sleep(sleepy_time)
-            res = self.issue_remote_command(
-                self.build_remote_command('squeue -u di46bak'))
-            finished = [job_id not in res for job_id in job_ids]
-            if all(finished):
-                jobs_finished = True
-                logging.info('Jobs all finished.')
-
     def prepare_common_files(self, folder):
         with open(self.par_file, 'rt') as f:
             data = f.read()
             data = data.replace('material_file_name', self.material_file)
-            data = data.replace('mesh_file_name', self.mesh_file)
+            data = data.replace('mesh_file_name', self.puml_mesh_file)
         with open(os.path.join(folder, self.par_file), 'wt') as f:
             f.write(data)
         for file in self.netcdf_files + [
-                self.mesh_file, self.material_file, self.sim_job_file]:
+                self.gmsh_mesh_file, self.material_file, self.sim_job_file]:
             shutil.copyfile(file, os.path.join(folder, file))
 
     def get_ref_idx(self, folder):
@@ -280,20 +321,3 @@ class SeisSolSimulator():
                    (rake, slip1_cm, nt1, slip2_cm, nt2, slip3_cm, nt3))
         np.savetxt(fout, sliprate_cm, fmt='%.18e')
         fout.close()
-
-    def issue_remote_command(self, cmd):
-        done = False
-        while not done:
-            try:
-                res = subprocess.check_output(cmd).decode('utf-8')
-                done = True
-            except subprocess.CalledProcessError:
-                # try command again in a little bit when connection
-                # is hopefully back
-                print('Unable to make connection... trying again later.')
-                time.sleep(sleepy_time)
-        return res
-
-    def build_remote_command(self, cmd):
-        host = 'skx.supermuc.lrz.de'
-        return ['ssh', '%s' % host, cmd]

@@ -10,14 +10,15 @@ from scipy.spatial import Voronoi
 eps = sys.float_info.epsilon
 
 
-def voronoi_sample(points, min_vals, max_vals, kf_errors, method,
-                   n_samples_refine, kval_refine, interp_refine, plot=False):
+def voronoi_sample(points, min_vals, max_vals, scores, method,
+                   n_samples_refine, plot=False):
+
+    # TODO: need to check if scores high value is good or bad (metric or scorer)
     dim = points.shape[1]
     points_norm = (points - min_vals) / (max_vals - min_vals)
     vor = bounded_voronoi(points_norm)
-    kf_errors = kf_errors[kval_refine][interp_refine]
     pvertices = vor.vertices[
-        vor.filtered_regions[np.argmax(kf_errors)]]
+        vor.filtered_regions[np.argmin(scores)]]
     pvertices = pvertices[
         (pvertices.T[0] >= (0 - eps)) & (pvertices.T[0] <= (1 + eps))]
     pvertices = pvertices[
@@ -46,17 +47,14 @@ def voronoi_sample(points, min_vals, max_vals, kf_errors, method,
     #     chosen_points_norm = np.array(chosen_points_norm)
 
     points = chosen_points_norm * (max_vals - min_vals) + min_vals
-
     if plot:
         plot_voronoi_diagram(
-            vor, points_norm, kf_errors, chosen_points_norm, 'vor_%s.png' %
+            vor, points_norm, scores, chosen_points_norm, 'vor_%s.png' %
             points_norm.shape[0])
-
     return points
 
 
 def bounded_voronoi(points):
-
     all_points = np.copy(points)
     dimension = points.shape[1]
     for dim1 in range(dimension):
@@ -87,30 +85,29 @@ def bounded_voronoi(points):
     vor.filtered_points = points
     vor.filtered_regions = np.array(
         vor.regions)[vor.point_region[:vor.npoints//(2*dimension + 1)]]
-
     return vor
 
 
-def plot_voronoi_diagram(vor, points, kf_errors, chosen_points_norm, fname):
+def plot_voronoi_diagram(vor, points, scores, chosen_points_norm, fname):
     norm = mpl.colors.Normalize(vmin=np.min(
-        kf_errors), vmax=np.max(kf_errors), clip=True)
+        scores), vmax=np.max(scores), clip=True)
     mapper = cm.ScalarMappable(norm=norm, cmap=cm.viridis)
     for region in vor.filtered_regions:
         vertices = vor.vertices[region + [region[0]], :]
         plt.plot(vertices[:, 0], vertices[:, 1], 'k-')
-    sc = plt.scatter(points.T[0], points.T[1], c=kf_errors, zorder=5)
+    sc = plt.scatter(points.T[0], points.T[1], c=scores, zorder=5)
     plt.scatter(
         chosen_points_norm.T[0], chosen_points_norm.T[1], c='r', zorder=6)
     plt.scatter(points.T[0], points.T[1], c='k', zorder=7)
     for r, region in enumerate(vor.filtered_regions):
         if -1 not in region:
             polygon = [vor.vertices[i] for i in region]
-            plt.fill(*zip(*polygon), color=mapper.to_rgba(kf_errors[r]))
+            plt.fill(*zip(*polygon), color=mapper.to_rgba(scores[r]))
     plt.xlim(0, 1)
     plt.ylim(0, 1)
     plt.xlabel('Depth (normalized)')
     plt.ylabel('Strike (normalized)')
     plt.title('$N=%s$' % len(points))
-    plt.colorbar(sc, label='Relative $L_2$ error')
+    plt.colorbar(sc, label='Score')
     plt.savefig(fname)
     plt.close('all')
