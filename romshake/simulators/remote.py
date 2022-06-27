@@ -5,9 +5,12 @@ import logging
 import paramiko
 
 SLEEPY_TIME = 1 * 60  # Time to wait between calls
-HOST = 'skx.supermuc.lrz.de'
-USER = 'di46bak'
-SCRATCH_DIR = '/hppfs/scratch/0B/di46bak/'
+# HOST = 'skx.supermuc.lrz.de'
+HOST = 'login.expanse.sdsc.edu'
+# USER = 'di46bak'
+USER = 'jrekoske'
+# SCRATCH_DIR = '/hppfs/scratch/0B/di46bak/'
+SCRATCH_DIR = '/expanse/lustre/scratch/jrekoske/temp_project'
 REMOTE_DIR = '%s@%s:%s' % (USER, HOST, SCRATCH_DIR)
 
 
