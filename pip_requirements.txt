@@ -1,2 +1,4 @@
 seissolxdmf
 seissolxdmfwriter
+scikeras
+tensorflow
