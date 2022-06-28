@@ -1,0 +1,3 @@
+cudann
+cudatoolkit
+rapids

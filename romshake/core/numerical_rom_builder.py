@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 from scipy.stats import qmc
 from matplotlib import pyplot as plt
-
 from romshake.sample import voronoi
 
 FNAME = 'rom_builder.pkl'

@@ -1,6 +1,5 @@
 cartopy
-cudatoolkit=11.0
-cudnn=8.1.0
+dask-ml
 gmsh
 h5py
 joblib
@@ -11,12 +10,12 @@ openquake.engine
 pandas
 paramiko
 pyproj
-python=3.9
+python
 pyyaml
-rapids=22.06
 rasterio
-scikit-learn
+scikit-learn=1.0.2
 scipy
 setuptools
+tensorflow
 tqdm
 trimesh

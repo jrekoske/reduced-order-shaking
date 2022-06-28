@@ -2,22 +2,45 @@ import os
 import shutil
 import logging
 import numpy as np
-from joblib import Memory
 import pandas as pd
+from joblib import Memory
+from tensorflow import keras
 from sklearn import preprocessing
 from sklearn.pipeline import Pipeline
+from scikeras.wrappers import KerasRegressor
+from dask_ml.model_selection import GridSearchCV
+
+# CPU
 from sklearn.decomposition import TruncatedSVD
-from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.compose import TransformedTargetRegressor
 from sklearn.model_selection import train_test_split
-
-from sklearn.tree import DecisionTreeRegressor  # NOQA
+from sklearn.ensemble import RandomForestRegressor  # NOQA
 from sklearn.neural_network import MLPRegressor  # NOQA
 from sklearn.neighbors import KNeighborsRegressor  # NOQA
-from romshake.core.rbf_regressor import RBFRegressor  # NOQA
 
+# GPU
+# from cuml.dask.decomposition import TruncatedSVD  # NOQA
+# from cuml.neighbors import KNeighborsRegressor  # NOQA
+# from cuml.dask.ensemble import RandomForestRegressor  # NOQA
+
+# Local
+from romshake.core.rbf_regressor import RBFRegressor
 from romshake.simulators.remote import REMOTE_DIR, copy_file, run_jobs
+
+# Keras neural network model
+def get_nn_model(hidden_layer_dim, n_hidden_layers, meta):
+    n_features_in_ = meta['n_features_in_']
+    X_shape_ = meta['X_shape_']
+    n_outputs_ = meta['n_outputs_']
+    model = keras.models.Sequential()
+    model.add(keras.layers.Dense(n_features_in_, input_shape=X_shape_[1:]))
+    model.add(keras.layers.Activation('relu'))
+    for i in range(n_hidden_layers):
+        model.add(keras.layers.Dense(hidden_layer_dim))
+        model.add(keras.layers.Activation('relu'))
+    model.add(keras.layers.Dense(n_outputs_))
+    return model
 
 
 class ReducedOrderModel():
@@ -36,7 +59,11 @@ class ReducedOrderModel():
         """
         self.hyper_params = []
         for rname, hypers in regressors.items():
-            rdict = {'regressor__reg': [globals()[rname](**hypers)]}
+            if rname == 'NeuralNetwork':
+                rdict = {'regressor__reg':  [KerasRegressor(
+                    get_nn_model, loss='mse', optimizer='adam', **hypers)]}
+            else:
+                rdict = {'regressor__reg': [globals()[rname](**hypers)]}
             for hyp_name, hyp_val in hypers.items():
                 rdict['regressor__reg__%s' % hyp_name] = hyp_val
             rdict['transformer__svd__n_components'] = svd_ncomps
@@ -82,8 +109,8 @@ class ReducedOrderModel():
         trans_regr = TransformedTargetRegressor(
             regressor=regressor, transformer=transformer, check_inverse=False)
         print(self.hyper_params)
-        search = GridSearchCV(trans_regr, self.hyper_params, verbose=4,
-                              n_jobs=-1, scoring=self.scoring)
+        search = GridSearchCV(trans_regr, self.hyper_params,
+                              scoring=self.scoring)
         logging.info('Starting grid search of model hyperparameters.')
         search.fit(self.X_train, self.y_train)
         logging.info('The best parameters are: %s' % search.best_params_)
