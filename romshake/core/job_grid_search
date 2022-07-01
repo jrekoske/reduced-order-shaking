@@ -1,0 +1,14 @@
+#!/bin/bash
+#SBATCH --job-name="john-grid-search"
+#SBATCH -o ./%j.%x.out
+#SBATCH -e ./%j.%x.err
+#SBATCH --nodes=1
+#SBATCH --mem=93G
+#SBATCH --account=sds154
+#SBATCH --partition=gpu-debug
+#SBATCH --ntasks-per-node=10
+#SBATCH --cpus-per-task=1
+#SBATCH --gpus=4
+#SBATCH --time=00:30:00
+#SBATCH --constraint="lustre"
+srun python -u grid_search.py

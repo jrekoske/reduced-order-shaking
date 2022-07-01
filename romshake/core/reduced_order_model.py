@@ -8,15 +8,14 @@ from tensorflow import keras
 from sklearn import preprocessing
 from sklearn.pipeline import Pipeline
 from scikeras.wrappers import KerasRegressor
+from sklearn.preprocessing import StandardScaler
 from dask_ml.model_selection import GridSearchCV
+from sklearn.model_selection import train_test_split
+from sklearn.compose import TransformedTargetRegressor
 
 # CPU
 from sklearn.decomposition import TruncatedSVD
-from sklearn.preprocessing import StandardScaler
-from sklearn.compose import TransformedTargetRegressor
-from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor  # NOQA
-from sklearn.neural_network import MLPRegressor  # NOQA
 from sklearn.neighbors import KNeighborsRegressor  # NOQA
 
 # GPU
@@ -27,6 +26,7 @@ from sklearn.neighbors import KNeighborsRegressor  # NOQA
 # Local
 from romshake.core.rbf_regressor import RBFRegressor
 from romshake.simulators.remote import REMOTE_DIR, copy_file, run_jobs
+
 
 # Keras neural network model
 def get_nn_model(hidden_layer_dim, n_hidden_layers, meta):
@@ -54,7 +54,7 @@ class ReducedOrderModel():
             parameters (dict, optional): Dictionary of parameters
                 for grid search of ML hyperparameters.
             test_size (float): Fraction of data (forward models) to
-                holdout from training.
+                holdout from training.  
             scoring (str): Scorer string (scikit-learn).
         """
         self.hyper_params = []
