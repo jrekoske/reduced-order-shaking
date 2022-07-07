@@ -1,9 +1,7 @@
 import os
-import shutil
+import pickle
 import logging
 import numpy as np
-import pandas as pd
-from joblib import Memory
 from tensorflow import keras
 from sklearn import preprocessing
 from sklearn.pipeline import Pipeline
@@ -18,14 +16,9 @@ from sklearn.decomposition import TruncatedSVD
 from sklearn.ensemble import RandomForestRegressor  # NOQA
 from sklearn.neighbors import KNeighborsRegressor  # NOQA
 
-# GPU
-# from cuml.dask.decomposition import TruncatedSVD  # NOQA
-# from cuml.neighbors import KNeighborsRegressor  # NOQA
-# from cuml.dask.ensemble import RandomForestRegressor  # NOQA
-
 # Local
 from romshake.core.rbf_regressor import RBFRegressor
-from romshake.simulators.remote import REMOTE_DIR, copy_file, run_jobs
+from romshake.core.remote_controller import copy_file
 
 
 # Keras neural network model
@@ -45,17 +38,17 @@ def get_nn_model(hidden_layer_dim, n_hidden_layers, meta):
 
 class ReducedOrderModel():
     def __init__(
-            self, regressors, svd_ncomps, test_size, scoring,
-            remote_grid_search=None, folder=None, grid_search_job_file=None,
-            grid_search_script=None):
+            self, regressors, svd_ncomps, test_size, scoring, folder,
+            remote=None):
         """Class for encapsulating reduced order model information.
 
         Args:
             parameters (dict, optional): Dictionary of parameters
                 for grid search of ML hyperparameters.
             test_size (float): Fraction of data (forward models) to
-                holdout from training.  
+                holdout from training.
             scoring (str): Scorer string (scikit-learn).
+            remote (object, optional): Remote controller object.
         """
         self.hyper_params = []
         for rname, hypers in regressors.items():
@@ -70,10 +63,8 @@ class ReducedOrderModel():
             self.hyper_params.append(rdict)
         self.test_size = test_size
         self.scoring = scoring
-        self.remote_grid_search = remote_grid_search
+        self.remote = remote
         self.folder = folder
-        self.grid_search_job_file = grid_search_job_file
-        self.grid_search_script = grid_search_script
 
     def update(self, newX, newy):
         """Updates an existing reduced order model with new parameters/data.
@@ -91,21 +82,20 @@ class ReducedOrderModel():
         else:
             self.X = newX
             self.y = newy
-        if self.remote_grid_search:
+        if self.remote is not None:
             self.launch_remote_grid_search()
         else:
             self.train_search_models()
 
     def train_search_models(self):
-        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
-            self.X, self.y, test_size=self.test_size)
+        self.X_train, self.X_test, self.y_train, self.y_test = \
+            train_test_split(
+                self.X, self.y, test_size=self.test_size)
         regressor = Pipeline(
             steps=[('scaler', StandardScaler()), ('reg', RBFRegressor())])
-        location = 'cachedir'
-        memory = Memory(location=location, verbose=10)
         transformer = Pipeline([
             ('svd', TruncatedSVD()),
-            ('yscaler', preprocessing.StandardScaler())], memory=memory)
+            ('yscaler', preprocessing.StandardScaler())])
         trans_regr = TransformedTargetRegressor(
             regressor=regressor, transformer=transformer, check_inverse=False)
         print(self.hyper_params)
@@ -120,10 +110,6 @@ class ReducedOrderModel():
         self.y_pred = search.predict(self.X_test)
         self.search = search
 
-        # Delete the temporary cache directory
-        memory.clear(warn=False)
-        shutil.rmtree(location)
-
     def launch_remote_grid_search(self):
         job_dir = os.path.join(self.folder, 'jobs')
         if os.path.exists(job_dir):
@@ -133,17 +119,15 @@ class ReducedOrderModel():
             os.makedirs(job_dir)
             jobidx = 0
         remote_job_file_loc = os.path.join(
-            REMOTE_DIR, self.folder, 'jobs', 'job%s' % jobidx)
-        copy_file(self.grid_search_job_file, remote_job_file_loc)
-        copy_file(self.grid_search_script, os.path.join(
-            REMOTE_DIR, self.folder))
-        run_jobs([jobidx], self.folder)
-
-        files_to_copy = ['X.npy', 'ypred.npy', 'grid_search_results.csv']
+            self.remote.remote_wdir, 'jobs', 'job%s' % jobidx)
+        copy_file(os.path.join(
+            self.folder, 'index_params.csv'), self.remote.remote_wdir)
+        copy_file(self.remote.grid_search_job_file, remote_job_file_loc)
+        copy_file(self.remote.grid_search_script, self.remote.remote_wdir)
+        self.remote.run_jobs([jobidx])
+        files_to_copy = ['search_results.pkl']
         for file in files_to_copy:
-            copy_file(os.path.join(REMOTE_DIR, self.folder, file), self.folder)
-
-        X = np.load(os.path.join(self.folder, 'X.npy'))
-        ypred = np.load(os.path.join(self.folder, 'ypred.npy'))
-        search_df = pd.read_csv(os.path.join(self.folder, 'grid_search_results.csv'))
-        return (X, ypred, search_df)
+            copy_file(os.path.join(
+                self.remote.remote_wdir, file), self.folder)
+        with open('search_results.pkl', 'rb') as inp:
+            self.search = pickle.load(inp)

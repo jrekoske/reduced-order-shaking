@@ -1,3 +1,4 @@
+import importlib
 import os
 import time
 import h5py
@@ -7,8 +8,7 @@ import logging
 import subprocess
 import numpy as np
 from matplotlib import pyplot as plt
-from romshake.simulators.remote import (issue_remote_command, SLEEPY_TIME,
-                                        SCRATCH_DIR, REMOTE_DIR, run_jobs)
+from romshake.core.remote_controller import SLEEPY_TIME
 from romshake.simulators.reorder_elements import run_reordering
 from scripts.mesh_plot import triplot
 
@@ -27,7 +27,7 @@ logging.getLogger('paramiko').setLevel(logging.WARNING)
 class SeisSolSimulator():
     def __init__(self, par_file, sim_job_file, prefix,
                  max_jobs, t_per_sim, t_max_per_job, take_log_imt,
-                 mesh_coords, netcdf_files=[], make_mesh_func=None):
+                 mesh_coords, remote, netcdf_files=[]):
         self.par_file = par_file
         self.sim_job_file = sim_job_file
         self.prefix = prefix
@@ -36,6 +36,7 @@ class SeisSolSimulator():
         self.t_max_per_job = t_max_per_job
         self.take_log_imt = take_log_imt
         self.mesh_coords = mesh_coords
+        self.remote = remote
         self.netcdf_files = netcdf_files
 
         self.puml_mesh_file = '%s.puml.h5' % self.prefix
@@ -46,7 +47,9 @@ class SeisSolSimulator():
         tmp_geo_mesh_file = 'tmp.geo'
         new_geo_mesh_file = '%s.geo' % prefix
         if not os.path.exists(self.gmsh_mesh_file):
-            make_mesh_func(tmp_geo_mesh_file, new_geo_mesh_file, mesh_coords)
+            make_mesh_mod = importlib.import_module('make_mesh')
+            make_mesh_mod.make_mesh(
+                tmp_geo_mesh_file, new_geo_mesh_file, mesh_coords)
 
     def load_data(self, folder, indices):
         logging.info('Loading data.')
@@ -107,26 +110,11 @@ class SeisSolSimulator():
                 source_params[param_label] = param_vals[i]
             self.write_source_files(folder, source_params, sim_idx)
         job_indices = self.prepare_jobs(folder, indices)
-        self.sync_files(folder, REMOTE_DIR, False)
+        self.sync_files(folder, self.remote.full_scratch_dir, False)
         self.make_puml_file(folder)
-        run_jobs(job_indices, folder)
-        # self.launch_jobs(folder, job_indices)
-        # self.sync_files('%s/%s/' % (REMOTE_DIR, folder), folder, True)
-        # successful_indices = self.get_successful_indices(folder, indices)
-        # self.reorder_elements(folder, successful_indices)
-
-        # params_arr = np.array(list(params_dict.values())).T
-        # good_params = np.array(
-            # [param for param, idx in zip(params_arr, indices)
-            #  if idx in successful_indices])
-
-        # data = self.load_data(folder, successful_indices)
-        # self.plot_data(successful_indices, data, folder)
-        # return good_params, data
-
-        # Return None values because we don't need to get the data
-        # SuperMUC locally
-        return (None, None)
+        self.remote.run_jobs(job_indices)
+        # Return empty arrays because we don't need the data locally
+        return (np.array([]), np.array([]))
 
     def plot_data(self, successful_indices, data, folder):
         for i in range(len(successful_indices)):
@@ -152,11 +140,11 @@ class SeisSolSimulator():
             fig.savefig(os.path.join(fig_dir, '%s.png' % idx))
 
     def make_puml_file(self, folder):
-        wdir = '%s%s' % (SCRATCH_DIR, folder)
+        wdir = '%s%s' % (self.remote.scratch_dir, folder)
         if self.puml_mesh_file not in str(
-                issue_remote_command('ls %s' % wdir)):
+                self.remote.issue_remote_command('ls %s' % wdir)):
             logging.info('Running pumgen to create PUML mesh file.')
-            issue_remote_command(
+            self.remote.issue_remote_command(
                 'cd %s; pumgen %s -s msh2' % (
                     wdir, self.gmsh_mesh_file))
 
@@ -214,9 +202,13 @@ class SeisSolSimulator():
                 data.append('\ncd %s' % sim_idx)
                 data.append('\nmpiexec -n $SLURM_NTASKS %s %s' % (
                     seissol_exe, self.par_file))
+                # data.append(
+                #     ('\nmpiexec -n $SLURM_NTASKS python -u %s'
+                #      ' output/loh1-surface.xdmf' % gm_exe))
                 data.append(
-                    ('\nmpiexec -n $SLURM_NTASKS python -u %s'
+                    ('\nsrun python -u %s --MP 48 --noMPI '
                      ' output/loh1-surface.xdmf' % gm_exe))
+                # Figure out why mpiexec is causing a segfault here
                 data.append('\ncd ..')
             with open(os.path.join(
                     job_dir, 'job%s' % jobidx), 'w') as myfile:

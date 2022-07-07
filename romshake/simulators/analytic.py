@@ -1,8 +1,11 @@
 import numpy as np
+from romshake import analytic_funcs
 
 
 class AnalyticSimulator():
     def __init__(self, func):
+        if isinstance(func, str):
+            func = getattr(analytic_funcs, func)
         self.func = func
 
     def evaluate(self, params_dict, **kwargs):

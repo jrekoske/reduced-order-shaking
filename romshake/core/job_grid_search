@@ -11,4 +11,5 @@
 #SBATCH --gpus=4
 #SBATCH --time=00:30:00
 #SBATCH --constraint="lustre"
+mamba activate romshake-gpu
 srun python -u grid_search.py

@@ -13,7 +13,7 @@ LOG_FILE = 'output.log'
 
 
 class NumericalRomBuilder():
-    def __init__(self, folder, simulator, rom, n_seeds_initial, n_seeds_refine,
+    def __init__(self, folder, simulator, rom, remote, n_seeds_initial, n_seeds_refine,
                  n_seeds_stop, samp_method, bounds, clear,
                  desired_score, make_test_figs):
         """Class for building reduced-order models from numerical simulations.
@@ -24,6 +24,7 @@ class NumericalRomBuilder():
                 new data from parameters. Can be either analytic or launch
                 numerical simulation jobs.
             rom (object): Reduced order model object.
+            remote (object): Remote controller object.
             n_seeds_initial (int): Number of seeds for the first iteration.
             n_seeds_refine (int): Number of seeds to generate with each
                 iteration.
@@ -39,6 +40,7 @@ class NumericalRomBuilder():
         self.folder = folder
         self.simulator = simulator
         self.rom = rom
+        self.remote = remote
         self.n_seeds_initial = n_seeds_initial
         self.n_seeds_refine = n_seeds_refine
         self.n_seeds_stop = n_seeds_stop
@@ -115,6 +117,7 @@ class NumericalRomBuilder():
             self.df = newdf
             start_idx = 0
         indices = list(range(start_idx, start_idx + samples.shape[0]))
+        self.df.to_csv(os.path.join(self.folder, 'index_params.csv'))
         return samples, indices
 
     def run_forward_models(self, params, indices):
@@ -134,7 +137,7 @@ class NumericalRomBuilder():
 
         labels = list(self.bounds.keys())
         params_dict = {label: param for label, param in zip(labels, params.T)}
-        return self.simulator.evaluate(
+        return self.simulator.simulator.evaluate(
             params_dict, indices=indices, folder=self.folder)
 
     def train(self):
