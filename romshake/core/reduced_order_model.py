@@ -124,6 +124,8 @@ class ReducedOrderModel():
             self.folder, 'index_params.csv'), self.remote.remote_wdir)
         copy_file(self.remote.grid_search_job_file, remote_job_file_loc)
         copy_file(self.remote.grid_search_script, self.remote.remote_wdir)
+        copy_file('config.yml', self.remote.remote_wdir)
+
         self.remote.run_jobs([jobidx])
         files_to_copy = ['search_results.pkl']
         for file in files_to_copy:

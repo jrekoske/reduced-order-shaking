@@ -27,7 +27,7 @@ logging.getLogger('paramiko').setLevel(logging.WARNING)
 class SeisSolSimulator():
     def __init__(self, par_file, sim_job_file, prefix,
                  max_jobs, t_per_sim, t_max_per_job, take_log_imt,
-                 mesh_coords, remote, netcdf_files=[]):
+                 mesh_coords, make_mesh, remote, netcdf_files=[]):
         self.par_file = par_file
         self.sim_job_file = sim_job_file
         self.prefix = prefix
@@ -38,7 +38,6 @@ class SeisSolSimulator():
         self.mesh_coords = mesh_coords
         self.remote = remote
         self.netcdf_files = netcdf_files
-
         self.puml_mesh_file = '%s.puml.h5' % self.prefix
         self.material_file = '%s.yaml' % self.prefix
 
@@ -46,7 +45,7 @@ class SeisSolSimulator():
         self.gmsh_mesh_file = '%s.msh' % prefix
         tmp_geo_mesh_file = 'tmp.geo'
         new_geo_mesh_file = '%s.geo' % prefix
-        if not os.path.exists(self.gmsh_mesh_file):
+        if not os.path.exists(self.gmsh_mesh_file) and make_mesh:
             make_mesh_mod = importlib.import_module('make_mesh')
             make_mesh_mod.make_mesh(
                 tmp_geo_mesh_file, new_geo_mesh_file, mesh_coords)
@@ -206,7 +205,7 @@ class SeisSolSimulator():
                 #     ('\nmpiexec -n $SLURM_NTASKS python -u %s'
                 #      ' output/loh1-surface.xdmf' % gm_exe))
                 data.append(
-                    ('\nsrun python -u %s --MP 48 --noMPI '
+                    ('\npython -u %s --MP 48 --noMPI '
                      ' output/loh1-surface.xdmf' % gm_exe))
                 # Figure out why mpiexec is causing a segfault here
                 data.append('\ncd ..')

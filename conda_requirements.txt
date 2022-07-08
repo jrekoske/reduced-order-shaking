@@ -2,7 +2,6 @@ cartopy
 dask-ml
 gmsh
 h5py
-joblib
 matplotlib
 netcdf4
 numpy
