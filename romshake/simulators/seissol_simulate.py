@@ -27,7 +27,7 @@ logging.getLogger('paramiko').setLevel(logging.WARNING)
 class SeisSolSimulator():
     def __init__(self, par_file, sim_job_file, prefix,
                  max_jobs, t_per_sim, t_max_per_job, take_log_imt,
-                 mesh_coords, make_mesh, remote, netcdf_files=[]):
+                 mesh_coords, make_mesh, remote=None, netcdf_files=[]):
         self.par_file = par_file
         self.sim_job_file = sim_job_file
         self.prefix = prefix

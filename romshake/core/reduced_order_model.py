@@ -21,21 +21,6 @@ from romshake.core.rbf_regressor import RBFRegressor
 from romshake.core.remote_controller import copy_file
 
 
-# Keras neural network model
-def get_nn_model(hidden_layer_dim, n_hidden_layers, meta):
-    n_features_in_ = meta['n_features_in_']
-    X_shape_ = meta['X_shape_']
-    n_outputs_ = meta['n_outputs_']
-    model = keras.models.Sequential()
-    model.add(keras.layers.Dense(n_features_in_, input_shape=X_shape_[1:]))
-    model.add(keras.layers.Activation('relu'))
-    for i in range(n_hidden_layers):
-        model.add(keras.layers.Dense(hidden_layer_dim))
-        model.add(keras.layers.Activation('relu'))
-    model.add(keras.layers.Dense(n_outputs_))
-    return model
-
-
 class ReducedOrderModel():
     def __init__(
             self, regressors, svd_ncomps, test_size, scoring, folder,
@@ -133,3 +118,17 @@ class ReducedOrderModel():
                 self.remote.remote_wdir, file), self.folder)
         with open('search_results.pkl', 'rb') as inp:
             self.search = pickle.load(inp)
+
+# Keras neural network model
+def get_nn_model(hidden_layer_dim, n_hidden_layers, meta):
+    n_features_in_ = meta['n_features_in_']
+    X_shape_ = meta['X_shape_']
+    n_outputs_ = meta['n_outputs_']
+    model = keras.models.Sequential()
+    model.add(keras.layers.Dense(n_features_in_, input_shape=X_shape_[1:]))
+    model.add(keras.layers.Activation('relu'))
+    for i in range(n_hidden_layers):
+        model.add(keras.layers.Dense(hidden_layer_dim))
+        model.add(keras.layers.Activation('relu'))
+    model.add(keras.layers.Dense(n_outputs_))
+    return model
