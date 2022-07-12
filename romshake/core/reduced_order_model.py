@@ -110,14 +110,12 @@ class ReducedOrderModel():
         copy_file(self.remote.grid_search_job_file, remote_job_file_loc)
         copy_file(self.remote.grid_search_script, self.remote.remote_wdir)
         copy_file('config.yml', self.remote.remote_wdir)
-
         self.remote.run_jobs([jobidx])
-        files_to_copy = ['search_results.pkl']
-        for file in files_to_copy:
-            copy_file(os.path.join(
-                self.remote.remote_wdir, file), self.folder)
-        with open('search_results.pkl', 'rb') as inp:
-            self.search = pickle.load(inp)
+        copy_file(os.path.join(
+            self.remote.remote_wdir, 'rom.pkl'), self.folder)
+        with open('rom.pkl', 'rb') as inp:
+            self = pickle.load(inp)
+
 
 # Keras neural network model
 def get_nn_model(hidden_layer_dim, n_hidden_layers, meta):

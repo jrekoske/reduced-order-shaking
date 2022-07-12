@@ -158,12 +158,6 @@ class SeisSolSimulator():
         srf_fname = os.path.join(sim_dir, 'source.srf')
         nrf_fname = srf_fname.replace('srf', 'nrf')
         self.write_standard_rupture_format(**source_params, fname=srf_fname)
-
-        subprocess.call(
-            ['/bin/zsh', '-i', '-c', (
-                'rconv -i %s -m "+proj=utm +zone=11 +ellps=WGS84 +datum=WGS84'
-                ' +units=m +no_defs" -o %s') % (srf_fname, nrf_fname)])
-
         shutil.copyfile(
             os.path.join(folder, self.par_file),
             os.path.join(sim_dir, self.par_file))
@@ -199,15 +193,18 @@ class SeisSolSimulator():
             data = [sub.replace('jobidx', jobidx) for sub in data]
             for sim_idx in sims_groups[i]:
                 data.append('\ncd %s' % sim_idx)
+                data.append(
+                    '\nrconv -i source.srf -o source.nrf -m "+proj=utm '
+                    '+zone=11 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"')
                 data.append('\nmpiexec -n $SLURM_NTASKS %s %s' % (
                     seissol_exe, self.par_file))
                 # data.append(
                 #     ('\nmpiexec -n $SLURM_NTASKS python -u %s'
                 #      ' output/loh1-surface.xdmf' % gm_exe))
+                # Figure out why mpiexec is causing a segfault here
                 data.append(
                     ('\npython -u %s --MP 48 --noMPI --lowpass 1.0'
                      ' output/loh1-surface.xdmf' % gm_exe))
-                # Figure out why mpiexec is causing a segfault here
                 data.append('\ncd ..')
             with open(os.path.join(
                     job_dir, 'job%s' % jobidx), 'w') as myfile:

@@ -4,7 +4,7 @@ import logging
 import paramiko
 import subprocess
 
-SLEEPY_TIME = 1 * 60  # Time to wait between calls (seconds)
+SLEEPY_TIME = 30  # Time to wait between calls (seconds)
 
 
 class RemoteController():
@@ -28,8 +28,6 @@ class RemoteController():
                 ssh.connect(self.host, username=self.user, look_for_keys=False)
                 logging.info('Executing command %s' % cmd)
                 _, stdout, stderr = ssh.exec_command(cmd)
-                logging.info('Output:', stdout.readlines())
-                logging.info('Error:', stderr.readlines())
                 done = True
             except TimeoutError:
                 # try again later when connection is hopefully back
@@ -37,7 +35,7 @@ class RemoteController():
                              ' the command %s. Trying again in %s seconds' % (
                                  cmd, SLEEPY_TIME))
                 time.sleep(SLEEPY_TIME)
-        return stdout.readlines()
+        return stdout.readlines() 
 
     def run_jobs(self, job_indices):
         job_dir = os.path.join(self.scratch_dir, self.folder, 'jobs')
