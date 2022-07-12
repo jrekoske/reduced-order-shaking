@@ -14,7 +14,7 @@ from scripts.mesh_plot import triplot
 
 imt = 'PGV'
 mask_file = 'mask.npy'
-h5_gm_cor_file = 'loh1-GME_corrected.h5'
+h5_gm_cor_file = 'loh1_lp1.0-GME_corrected.h5'
 seissol_exe = 'SeisSol_Release_dskx_4_elastic'
 gm_exe = ('/dss/dsshome1/0B/di46bak/SeisSol/postprocessing/science/'
           'GroundMotionParametersMaps/ComputeGroundMotionParameters'
@@ -251,13 +251,13 @@ class SeisSolSimulator():
         idir = os.path.join(folder, 'data')
 
         ref_idx = self.get_ref_idx(folder)
-        ref_file = os.path.join(idir, str(ref_idx), 'loh1-GME.xdmf')
+        ref_file = os.path.join(idir, str(ref_idx), 'loh1_lp1.0-GME.xdmf')
 
         for idx in indices:
             idx = str(idx)
-            file = os.path.join(idir, idx, 'loh1-GME.xdmf')
+            file = os.path.join(idir, idx, 'loh1_lp1.0-GME.xdmf')
             run_reordering(ref_file, file, [-1], ['all'])
-            fname = 'loh1-GME_corrected'
+            fname = 'loh1_lp1.0-GME_corrected'
             h5name = '%s.h5' % fname
             xdmfname = '%s.xdmf' % fname
             h5new = os.path.join(idir, idx, h5name)
