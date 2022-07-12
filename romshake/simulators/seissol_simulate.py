@@ -205,7 +205,7 @@ class SeisSolSimulator():
                 #     ('\nmpiexec -n $SLURM_NTASKS python -u %s'
                 #      ' output/loh1-surface.xdmf' % gm_exe))
                 data.append(
-                    ('\npython -u %s --MP 48 --noMPI '
+                    ('\npython -u %s --MP 48 --noMPI --lowpass 1.0'
                      ' output/loh1-surface.xdmf' % gm_exe))
                 # Figure out why mpiexec is causing a segfault here
                 data.append('\ncd ..')
@@ -232,10 +232,9 @@ class SeisSolSimulator():
 
     def get_successful_indices(self, folder, indices):
         files = [
-            'loh1-GME-surface_cell.h5',
-            'loh1-GME-surface_vertex.h5',
-            'loh1-GME.xdmf'
-        ]
+            'loh1_lp1.0-GME-surface_cell.h5',
+            'loh1_lp1.0-GME-surface_vertex.h5',
+            'loh1_lp1.0-GME.xdmf']
         good_indices = []
         for idx in indices:
             success = True
