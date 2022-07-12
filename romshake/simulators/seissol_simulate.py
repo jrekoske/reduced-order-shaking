@@ -257,7 +257,7 @@ class SeisSolSimulator():
             idx = str(idx)
             file = os.path.join(idir, idx, 'loh1_lp1.0-GME.xdmf')
             run_reordering(ref_file, file, [-1], ['all'])
-            fname = 'loh1_lp1.0-GME_corrected'
+            fname = 'loh1-GME_corrected'
             h5name = '%s.h5' % fname
             xdmfname = '%s.xdmf' % fname
             h5new = os.path.join(idir, idx, h5name)
