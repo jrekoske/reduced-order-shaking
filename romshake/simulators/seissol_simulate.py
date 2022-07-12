@@ -14,7 +14,7 @@ from scripts.mesh_plot import triplot
 
 imt = 'PGV'
 mask_file = 'mask.npy'
-h5_gm_cor_file = 'loh1_lp1.0-GME_corrected.h5'
+h5_gm_cor_file = 'loh1-GME_corrected.h5'
 seissol_exe = 'SeisSol_Release_dskx_4_elastic'
 gm_exe = ('/dss/dsshome1/0B/di46bak/SeisSol/postprocessing/science/'
           'GroundMotionParametersMaps/ComputeGroundMotionParameters'
