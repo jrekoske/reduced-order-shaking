@@ -61,15 +61,15 @@ class ReducedOrderModel():
         logging.info(
             'Adding %s new simulations to the reduced order model.' %
             newX.shape[0])
-        if hasattr(self, 'X'):
-            self.X = np.concatenate((self.X, newX))
-            self.y = np.concatenate((self.y, newy))
-        else:
-            self.X = newX
-            self.y = newy
         if use_remote:
             self.launch_remote_grid_search()
         else:
+            if hasattr(self, 'X'):
+                self.X = np.concatenate((self.X, newX))
+                self.y = np.concatenate((self.y, newy))
+            else:
+                self.X = newX
+                self.y = newy
             self.train_search_models()
 
     def train_search_models(self):
