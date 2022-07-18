@@ -1,6 +1,5 @@
 cartopy
 dask-ml
-gmsh
 h5py
 matplotlib
 netcdf4

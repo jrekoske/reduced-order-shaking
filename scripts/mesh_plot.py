@@ -13,7 +13,6 @@ def triplot(x, y, triangles, values, ax, vmin=None, vmax=None, **kwargs):
     ax.add_collection(pc)
     ax.autoscale()
     ax.axis('equal')
-
     return pc
 
 
@@ -21,7 +20,6 @@ def mesh_plot(
         nodes, elements, true_values, pred_values, fname, l2, linf, title2):
     x = nodes[:, 0]
     y = nodes[:, 1]
-
     fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(16, 4))
     c = [true_values, pred_values, true_values - pred_values]
     titles = ['Forward model', title2,

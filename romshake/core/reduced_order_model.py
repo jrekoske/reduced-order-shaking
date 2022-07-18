@@ -51,7 +51,7 @@ class ReducedOrderModel():
         self.remote = remote
         self.folder = folder
 
-    def update(self, newX, newy):
+    def update(self, newX, newy, use_remote=True):
         """Updates an existing reduced order model with new parameters/data.
 
         Args:
@@ -67,7 +67,7 @@ class ReducedOrderModel():
         else:
             self.X = newX
             self.y = newy
-        if self.remote is not None:
+        if use_remote:
             self.launch_remote_grid_search()
         else:
             self.train_search_models()
@@ -110,10 +110,15 @@ class ReducedOrderModel():
         copy_file(self.remote.grid_search_job_file, remote_job_file_loc)
         copy_file(self.remote.grid_search_script, self.remote.remote_wdir)
         copy_file('config.yml', self.remote.remote_wdir)
+
+        rom_pickle_file = os.path.join(self.folder, 'rom.pkl')
+        with open(rom_pickle_file, 'wb') as outp:
+            pickle.dump(self, outp)
+        copy_file(rom_pickle_file, self.remote.remote_wdir)
         self.remote.run_jobs([jobidx])
         copy_file(os.path.join(
             self.remote.remote_wdir, 'rom.pkl'), self.folder)
-        with open('rom.pkl', 'rb') as inp:
+        with open(rom_pickle_file, 'rb') as inp:
             self = pickle.load(inp)
 
 

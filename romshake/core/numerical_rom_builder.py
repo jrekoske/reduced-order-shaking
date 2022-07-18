@@ -69,8 +69,6 @@ class NumericalRomBuilder():
             format='%(asctime)s %(message)s')
         logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
-        self.train()
-
     @classmethod
     def from_folder(cls, folder):
         with open(os.path.join(folder, FNAME), 'rb') as f:

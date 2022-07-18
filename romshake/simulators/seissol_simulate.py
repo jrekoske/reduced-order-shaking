@@ -23,6 +23,14 @@ gm_exe = ('/dss/dsshome1/0B/di46bak/SeisSol/postprocessing/science/'
 # Turn off excessive logging from Paramiko and matplotlib
 logging.getLogger('paramiko').setLevel(logging.WARNING)
 
+# Constant earthquake source parameters to use for all simulations
+source_params = {
+    'M': 6.0,
+    'tini': 0.0,
+    'slip1_cm': 100.0,
+    'slip2_cm': 0.0,
+    'slip3_cm': 0.0}
+
 
 class SeisSolSimulator():
     def __init__(self, par_file, sim_job_file, prefix,
@@ -42,13 +50,13 @@ class SeisSolSimulator():
         self.material_file = '%s.yaml' % self.prefix
 
         # Create the mesh if it doesn't exist yet
-        self.gmsh_mesh_file = '%s.msh' % prefix
+        self.gmsh_mesh_file = '%s.msh2' % prefix
         tmp_geo_mesh_file = 'tmp.geo'
         new_geo_mesh_file = '%s.geo' % prefix
         if not os.path.exists(self.gmsh_mesh_file) and make_mesh:
             make_mesh_mod = importlib.import_module('make_mesh')
             make_mesh_mod.make_mesh(
-                tmp_geo_mesh_file, new_geo_mesh_file, mesh_coords)
+                mesh_coords, tmp_geo_mesh_file, new_geo_mesh_file)
 
     def load_data(self, folder, indices):
         logging.info('Loading data.')
@@ -96,14 +104,6 @@ class SeisSolSimulator():
 
     def evaluate(self, params_dict, indices, folder, **kwargs):
         self.prepare_common_files(folder)
-        source_params = {
-            'M': 6.0,
-            'lon': -117.9437,
-            'lat': 34.1122,
-            'tini': 0.0,
-            'slip1_cm': 100.0,
-            'slip2_cm': 0.0,
-            'slip3_cm': 0.0}
         for i, sim_idx in enumerate(indices):
             for param_label, param_vals in params_dict.items():
                 source_params[param_label] = param_vals[i]
@@ -115,7 +115,8 @@ class SeisSolSimulator():
         # Return empty arrays because we don't need the data locally
         return (np.array([]), np.array([]))
 
-    def plot_data(self, successful_indices, data, folder):
+    def plot_data(self, successful_indices, folder, **kwargs):
+        data = self.load_data(folder, successful_indices)
         for i in range(len(successful_indices)):
             idx = successful_indices[i]
             plotdata = data.T[i]
@@ -131,12 +132,12 @@ class SeisSolSimulator():
             elem_mask = np.load(mask_path)
             im = triplot(
                 x, y, np.array(connect)[elem_mask],
-                plotdata, ax, edgecolor='face')
+                plotdata, ax, edgecolor='face', **kwargs)
             fig.colorbar(im, label='logPGV')
             fig_dir = os.path.join(folder, 'figs')
             if not os.path.exists(fig_dir):
                 os.makedirs(fig_dir)
-            fig.savefig(os.path.join(fig_dir, '%s.png' % idx))
+            fig.savefig(os.path.join(fig_dir, '%s.png' % idx), dpi=300)
 
     def make_puml_file(self, folder):
         wdir = '%s%s' % (self.remote.scratch_dir, folder)
@@ -156,7 +157,6 @@ class SeisSolSimulator():
                 os.makedirs(dir)
 
         srf_fname = os.path.join(sim_dir, 'source.srf')
-        nrf_fname = srf_fname.replace('srf', 'nrf')
         self.write_standard_rupture_format(**source_params, fname=srf_fname)
         shutil.copyfile(
             os.path.join(folder, self.par_file),

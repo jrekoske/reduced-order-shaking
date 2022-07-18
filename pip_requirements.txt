@@ -1,3 +1,4 @@
+gmsh
 seissolxdmf
 seissolxdmfwriter
 scikeras
