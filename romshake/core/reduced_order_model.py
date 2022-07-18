@@ -64,7 +64,7 @@ class ReducedOrderModel():
         if use_remote:
             self.launch_remote_grid_search()
         else:
-            if hasattr(self, 'X'):
+            if hasattr(self, 'X') and self.X.size != 0:
                 self.X = np.concatenate((self.X, newX))
                 self.y = np.concatenate((self.y, newy))
             else:
