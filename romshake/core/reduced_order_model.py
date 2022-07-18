@@ -7,7 +7,7 @@ from sklearn import preprocessing
 from sklearn.pipeline import Pipeline
 from scikeras.wrappers import KerasRegressor
 from sklearn.preprocessing import StandardScaler
-from dask_ml.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import train_test_split
 from sklearn.compose import TransformedTargetRegressor
 
@@ -85,7 +85,7 @@ class ReducedOrderModel():
             regressor=regressor, transformer=transformer, check_inverse=False)
         print(self.hyper_params)
         search = GridSearchCV(trans_regr, self.hyper_params,
-                              scoring=self.scoring)
+                              scoring=self.scoring, n_jobs=-1, verbose=4)
         logging.info('Starting grid search of model hyperparameters.')
         search.fit(self.X_train, self.y_train)
         logging.info('The best parameters are: %s' % search.best_params_)
