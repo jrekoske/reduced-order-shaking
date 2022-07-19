@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import qmc
 from matplotlib import pyplot as plt
+from sklearn.metrics import mean_squared_error
 from romshake.sample import voronoi
 
 FNAME = 'rom_builder.pkl'
@@ -15,7 +16,7 @@ LOG_FILE = 'output.log'
 class NumericalRomBuilder():
     def __init__(
             self, folder, simulator, rom, remote, n_seeds_initial,
-            n_seeds_refine, n_seeds_stop, samp_method, bounds, clear,
+            n_seeds_refine, n_cells_refine, n_seeds_stop, samp_method, bounds, clear,
             desired_score, make_test_figs):
         """Class for building reduced-order models from numerical simulations.
 
@@ -29,6 +30,8 @@ class NumericalRomBuilder():
             n_seeds_initial (int): Number of seeds for the first iteration.
             n_seeds_refine (int): Number of seeds to generate with each
                 iteration.
+            n_cells_refine (int): Number of Voronoi cells to sample with
+                each iteration (if using Voronoi sampling strategy).
             n_seeds_stop (int): Maximum number of seeds.
             samp_method (str): Sampling refinement strategy.
             bounds (dict): Min/max values for the parameter space.
@@ -93,11 +96,10 @@ class NumericalRomBuilder():
             samples = qmc.scale(self.halton_sampler.random(
                 n=n_samps), min_vals, max_vals)
         else:
-            scores = [self.metric_func(pred, true) for pred, true in zip(
+            errors = [mean_squared_error(true, pred) for pred, true in zip(
                 self.rom.y_pred, self.rom.y_test)]
             samples = voronoi.voronoi_sample(
-                self.rom.X_test, min_vals, max_vals, scores, sampling_method,
-                n_samps, plot=True)
+                self.rom.X_test, min_vals, max_vals, errors, n_samps)
 
         # Discard any samples that we already have run.
         if hasattr(self.rom, 'X'):
