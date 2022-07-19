@@ -113,6 +113,7 @@ class SeisSolSimulator():
         self.make_puml_file(folder)
         self.remote.run_jobs(job_indices)
         # Return empty arrays because we don't need the data locally
+        
         return (np.array([]), np.array([]))
 
     def plot_data(self, successful_indices, folder, **kwargs):

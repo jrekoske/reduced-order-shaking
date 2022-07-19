@@ -18,6 +18,6 @@ def voronoi_sample(points, min_vals, max_vals, errors, n_samples_refine):
     try:
         search.plot(size=(size, size), filename='voronoi_%s.pdf' %
                     points.shape[0])
-    except np.linalg.LinAlgError:
-        logging.info('Not enough samples to make the plot.')
+    except:
+        logging.info('Failed to make the plot.')
     return newX
