@@ -149,7 +149,6 @@ class SeisSolSimulator():
                     wdir, self.gmsh_mesh_file))
 
     def write_source_files(self, folder, source_params, sim_idx):
-        logging.info('Writing source files for simulation index %s' % sim_idx)
         sim_dir = os.path.join(folder, 'data', str(sim_idx))
         odir = os.path.join(sim_dir, 'output')
         for dir in [sim_dir, odir]:
@@ -217,7 +216,7 @@ class SeisSolSimulator():
             os.path.split(inspect.getfile(self.__class__))[0], 'exclude.txt')
         logging.info('Syncing files. Source: %s, Destination: %s' % (
             source, dest))
-        cmd = ("rsync -a %s %s --delete --progress "
+        cmd = ("rsync -a %s %s --progress "
                "--exclude-from=%s" % (source, dest, exclude_file))
         if exclude_output:
             cmd += ' --exclude output/'

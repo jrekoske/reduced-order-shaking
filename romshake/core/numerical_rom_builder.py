@@ -13,9 +13,10 @@ LOG_FILE = 'output.log'
 
 
 class NumericalRomBuilder():
-    def __init__(self, folder, simulator, rom, remote, n_seeds_initial, n_seeds_refine,
-                 n_seeds_stop, samp_method, bounds, clear,
-                 desired_score, make_test_figs):
+    def __init__(
+            self, folder, simulator, rom, remote, n_seeds_initial,
+            n_seeds_refine, n_seeds_stop, samp_method, bounds, clear,
+            desired_score, make_test_figs):
         """Class for building reduced-order models from numerical simulations.
 
         Args:
@@ -158,7 +159,10 @@ class NumericalRomBuilder():
                     self.samp_method, self.n_seeds_refine)
             new_params, new_data = self.run_forward_models(
                 new_params, new_indices)
-            self.rom.update(new_params, new_data.T)
+            self.rom = self.rom.update(new_params, new_data.T)
+            logging.info(
+                'The best score is %s with the estimator %s.' %
+                (self.rom.search.best_score_, self.rom.search.best_estimator_))
             self.save_results()
             nseeds = self.rom.X.shape[0]
             best_score = np.nanmax(self.score_history)
@@ -181,6 +185,9 @@ class NumericalRomBuilder():
         else:
             self.nsamples_history = [nseeds]
             self.score_history = [self.rom.search.best_score_]
+        logging.info('The number of samples history is: %s' %
+                     self.nsamples_history)
+        logging.info('The score history is: %s' % self.score_history)
         with open(os.path.join(self.folder, FNAME), 'wb') as outp:
             pickle.dump(self, outp)
         if self.make_test_figs:

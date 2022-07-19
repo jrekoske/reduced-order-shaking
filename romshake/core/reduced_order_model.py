@@ -58,11 +58,8 @@ class ReducedOrderModel():
             newX (array): New parameter array.
             newy (array): New data array.
         """
-        logging.info(
-            'Adding %s new simulations to the reduced order model.' %
-            newX.shape[0])
         if use_remote:
-            self.launch_remote_grid_search()
+            return self.launch_remote_grid_search()
         else:
             if hasattr(self, 'X') and self.X.size != 0:
                 self.X = np.concatenate((self.X, newX))
@@ -71,6 +68,7 @@ class ReducedOrderModel():
                 self.X = newX
                 self.y = newy
             self.train_search_models()
+            return self
 
     def train_search_models(self):
         self.X_train, self.X_test, self.y_train, self.y_test = \
@@ -115,11 +113,13 @@ class ReducedOrderModel():
         with open(rom_pickle_file, 'wb') as outp:
             pickle.dump(self, outp)
         copy_file(rom_pickle_file, self.remote.remote_wdir)
+        logging.info('Launching grid search job.')
         self.remote.run_jobs([jobidx])
         copy_file(os.path.join(
             self.remote.remote_wdir, 'rom.pkl'), self.folder)
         with open(rom_pickle_file, 'rb') as inp:
-            self = pickle.load(inp)
+            newrom = pickle.load(inp)
+        return newrom
 
 
 # Keras neural network model
