@@ -113,7 +113,6 @@ class SeisSolSimulator():
         self.make_puml_file(folder)
         self.remote.run_jobs(job_indices)
         # Return empty arrays because we don't need the data locally
-        
         return (np.array([]), np.array([]))
 
     def plot_data(self, successful_indices, folder, **kwargs):
@@ -198,12 +197,8 @@ class SeisSolSimulator():
                     '+zone=11 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"')
                 data.append('\nmpiexec -n $SLURM_NTASKS %s %s' % (
                     seissol_exe, self.par_file))
-                # data.append(
-                #     ('\nmpiexec -n $SLURM_NTASKS python -u %s'
-                #      ' output/loh1-surface.xdmf' % gm_exe))
-                # Figure out why mpiexec is causing a segfault here
                 data.append(
-                    ('\npython -u %s --MP 48 --noMPI --lowpass 1.0'
+                    ('\nsrun python -u %s --MP 48 --lowpass 1.0'
                      ' output/loh1-surface.xdmf' % gm_exe))
                 data.append('\ncd ..')
             with open(os.path.join(

@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+import matplotlib.pyplot as plt
 from neighborhood.search import Searcher
 
 
@@ -20,4 +21,5 @@ def voronoi_sample(points, min_vals, max_vals, errors, n_samples_refine):
                     points.shape[0])
     except:
         logging.info('Failed to make the plot.')
+    plt.close('all')
     return newX
