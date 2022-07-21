@@ -2,6 +2,7 @@ import os
 import shutil
 import pickle
 import logging
+import sys
 import numpy as np
 import pandas as pd
 from scipy.stats import qmc
@@ -68,9 +69,13 @@ class NumericalRomBuilder():
 
         # Set  up the logger
         logfile = os.path.join(folder, LOG_FILE)
+        file_handler = logging.FileHandler(filename=logfile)
+        stdout_handler = logging.StreamHandler(stream=sys.stdout)
+        handlers = [file_handler, stdout_handler]
+
         logging.basicConfig(
-            filename=logfile, level=logging.DEBUG,
-            format='%(asctime)s %(message)s')
+            level=logging.DEBUG,
+            format='%(asctime)s %(message)s', handlers=handlers)
         logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
     @classmethod
@@ -201,7 +206,7 @@ class NumericalRomBuilder():
         plt.axhline(self.desired_score, c='k', ls='--', lw=0.5)
         plt.xlabel('Number of samples')
         plt.ylabel('Score')
-        plt.savefig(os.path.join(self.folder, 'score_history.png'))
+        plt.savefig(os.path.join(self.folder, 'score_history.pdf'))
         plt.close()
 
     def plot_predictions(self, odir):

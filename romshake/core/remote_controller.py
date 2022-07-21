@@ -29,13 +29,13 @@ class RemoteController():
                 logging.info('Executing command %s' % cmd)
                 _, stdout, stderr = ssh.exec_command(cmd)
                 done = True
-            except TimeoutError:
+            except:
                 # try again later when connection is hopefully back
                 logging.info('Unable to make connection so could not execute'
                              ' the command %s. Trying again in %s seconds' % (
                                  cmd, SLEEPY_TIME))
                 time.sleep(SLEEPY_TIME)
-        return stdout.readlines() 
+        return stdout.readlines()
 
     def run_jobs(self, job_indices):
         job_dir = os.path.join(self.scratch_dir, self.folder, 'jobs')

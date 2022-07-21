@@ -25,7 +25,7 @@ logging.getLogger('paramiko').setLevel(logging.WARNING)
 
 # Constant earthquake source parameters to use for all simulations
 source_params = {
-    'M': 6.0,
+    'M': 4.5,
     'tini': 0.0,
     'slip1_cm': 100.0,
     'slip2_cm': 0.0,
