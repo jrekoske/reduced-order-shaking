@@ -2,6 +2,7 @@ import os
 import pickle
 import logging
 import numpy as np
+from joblib import Memory
 from tensorflow import keras
 from sklearn import preprocessing
 from sklearn.pipeline import Pipeline
@@ -11,12 +12,10 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import train_test_split
 from sklearn.compose import TransformedTargetRegressor
 
-# CPU
 from sklearn.decomposition import TruncatedSVD
 from sklearn.ensemble import RandomForestRegressor  # NOQA
 from sklearn.neighbors import KNeighborsRegressor  # NOQA
 
-# Local
 from romshake.core.rbf_regressor import RBFRegressor
 from romshake.core.remote_controller import copy_file
 
@@ -76,12 +75,12 @@ class ReducedOrderModel():
                 self.X, self.y, test_size=self.test_size)
         regressor = Pipeline(
             steps=[('scaler', StandardScaler()), ('reg', RBFRegressor())])
+        memory = Memory(location='cachedir', verbose=10)
         transformer = Pipeline([
             ('svd', TruncatedSVD()),
-            ('yscaler', preprocessing.StandardScaler())])
+            ('yscaler', preprocessing.StandardScaler())], memory=memory)
         trans_regr = TransformedTargetRegressor(
             regressor=regressor, transformer=transformer, check_inverse=False)
-        print(self.hyper_params)
         search = GridSearchCV(trans_regr, self.hyper_params,
                               scoring=self.scoring, n_jobs=-1, verbose=4)
         logging.info('Starting grid search of model hyperparameters.')
