@@ -43,7 +43,7 @@ source_params = {
 class SeisSolSimulator():
     def __init__(self, par_file, sim_job_file, prefix,
                  max_jobs, t_per_sim, t_max_per_job, take_log_imt,
-                 remote=None, netcdf_files=[]):
+                 mesh_coords, remote=None, netcdf_files=[])):
         self.par_file = par_file
         self.sim_job_file = sim_job_file
         self.prefix = prefix
@@ -56,6 +56,7 @@ class SeisSolSimulator():
         self.gmsh_mesh_file = '%s.msh2' % self.prefix
         self.puml_mesh_file = '%s.puml.h5' % self.prefix
         self.material_file = 'material.yaml'
+        self.mesh_coords = mesh_coords
 
     def load_data(self, folder, indices):
         logging.info('Loading data.')
