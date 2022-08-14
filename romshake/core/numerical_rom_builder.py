@@ -48,6 +48,7 @@ class NumericalRomBuilder():
         self.remote = remote
         self.n_seeds_initial = n_seeds_initial
         self.n_seeds_refine = n_seeds_refine
+        self.n_cells_refine = n_cells_refine
         self.n_seeds_stop = n_seeds_stop
         self.samp_method = samp_method
         self.bounds = bounds
@@ -104,7 +105,8 @@ class NumericalRomBuilder():
             errors = [mean_squared_error(true, pred) for pred, true in zip(
                 self.rom.y_pred, self.rom.y_test)]
             samples = voronoi.voronoi_sample(
-                self.rom.X_test, min_vals, max_vals, errors, n_samps)
+                self.rom.X_test, min_vals, max_vals, errors, n_samps,
+                self.n_cells_refine)
 
         # Discard any samples that we already have run.
         if hasattr(self.rom, 'X'):

@@ -106,7 +106,7 @@ class ReducedOrderModel():
             self.folder, 'index_params.csv'), self.remote.remote_wdir)
         copy_file(self.remote.grid_search_job_file, remote_job_file_loc)
         copy_file(self.remote.grid_search_script, self.remote.remote_wdir)
-        copy_file('config.yml', self.remote.remote_wdir)
+        copy_file('config.yaml', self.remote.remote_wdir)
 
         rom_pickle_file = os.path.join(self.folder, 'rom.pkl')
         with open(rom_pickle_file, 'wb') as outp:

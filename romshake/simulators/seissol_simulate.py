@@ -1,4 +1,3 @@
-import importlib
 import os
 import time
 import h5py
@@ -7,10 +6,13 @@ import inspect
 import logging
 import subprocess
 import numpy as np
+import netCDF4 as nc
 from matplotlib import pyplot as plt
+from pyproj import Transformer
+from scripts.mesh_plot import triplot
+from scipy.interpolate import RegularGridInterpolator
 from romshake.core.remote_controller import SLEEPY_TIME
 from romshake.simulators.reorder_elements import run_reordering
-from scripts.mesh_plot import triplot
 
 imt = 'PGV'
 mask_file = 'mask.npy'
@@ -23,19 +25,25 @@ gm_exe = ('/dss/dsshome1/0B/di46bak/SeisSol/postprocessing/science/'
 # Turn off excessive logging from Paramiko and matplotlib
 logging.getLogger('paramiko').setLevel(logging.WARNING)
 
-# Constant earthquake source parameters to use for all simulations
+# Default earthquake source parameters to use for simulations
 source_params = {
-    'M': 4.5,
+    'M': 4.54,
     'tini': 0.0,
-    'slip1_cm': 100.0,
+    'slip1_cm': 15.0,
     'slip2_cm': 0.0,
-    'slip3_cm': 0.0}
+    'slip3_cm': 0.0,
+    'lat': 34.038,
+    'lon': -118.080,
+    'depth': 5.0,
+    'strike': 0.0,
+    'dip': 90.0,
+    'rake': 0.0}
 
 
 class SeisSolSimulator():
     def __init__(self, par_file, sim_job_file, prefix,
                  max_jobs, t_per_sim, t_max_per_job, take_log_imt,
-                 mesh_coords, make_mesh, remote=None, netcdf_files=[]):
+                 remote=None, netcdf_files=[]):
         self.par_file = par_file
         self.sim_job_file = sim_job_file
         self.prefix = prefix
@@ -43,20 +51,11 @@ class SeisSolSimulator():
         self.t_per_sim = t_per_sim
         self.t_max_per_job = t_max_per_job
         self.take_log_imt = take_log_imt
-        self.mesh_coords = mesh_coords
         self.remote = remote
         self.netcdf_files = netcdf_files
+        self.gmsh_mesh_file = '%s.msh2' % self.prefix
         self.puml_mesh_file = '%s.puml.h5' % self.prefix
-        self.material_file = '%s.yaml' % self.prefix
-
-        # Create the mesh if it doesn't exist yet
-        self.gmsh_mesh_file = '%s.msh2' % prefix
-        tmp_geo_mesh_file = 'tmp.geo'
-        new_geo_mesh_file = '%s.geo' % prefix
-        if not os.path.exists(self.gmsh_mesh_file) and make_mesh:
-            make_mesh_mod = importlib.import_module('make_mesh')
-            make_mesh_mod.make_mesh(
-                mesh_coords, tmp_geo_mesh_file, new_geo_mesh_file)
+        self.material_file = 'material.yaml'
 
     def load_data(self, folder, indices):
         logging.info('Loading data.')
@@ -198,7 +197,7 @@ class SeisSolSimulator():
                 data.append('\nmpiexec -n $SLURM_NTASKS %s %s' % (
                     seissol_exe, self.par_file))
                 data.append(
-                    ('\nsrun python -u %s --MP 48 --lowpass 1.0'
+                    ('\nsrun python -u %s --periods 1 --MP 48 --lowpass 1.0'
                      ' output/loh1-surface.xdmf' % gm_exe))
                 data.append('\ncd ..')
             with open(os.path.join(
@@ -279,14 +278,17 @@ class SeisSolSimulator():
     def write_standard_rupture_format(
             self, lon, lat, depth, strike, dip, rake, M, tini, slip1_cm,
             slip2_cm, slip3_cm, fname):
-        dt = 0.0002
-        rho = 2700.0
-        vs = 3464.0
-        mu = vs**2*rho
+
+        # Area calculation
+        total_slip_cm = np.sqrt(slip1_cm**2 + slip2_cm**2 + slip3_cm**2)
+        total_slip_m = total_slip_cm / 100
         M0 = 10**(1.5 * M + 9.1)
-        area = M0/mu*1e4  # m^2 to cm^2
+        mu = self.get_local_shear_modulus(lon, lat, depth)
+        area_m2 = M0 / (mu * total_slip_m)
+        area_cm2 = area_m2 * 10000
 
         T = 0.1
+        dt = 0.0002
         vtime = np.arange(0, 4, dt)
         sliprate_cm = slip1_cm * 1/T**2 * vtime*np.exp(-vtime/T)
 
@@ -298,8 +300,28 @@ class SeisSolSimulator():
         fout.write('1.0\n')
         fout.write('POINTS 1\n')
         fout.write("%.5e %.5e %f %f %f %.10e %f %f\n" %
-                   (lon, lat, depth, strike, dip, area, tini, dt))
+                   (lon, lat, depth, strike, dip, area_cm2, tini, dt))
         fout.write("%f %f %d %f %d %f %d\n" %
                    (rake, slip1_cm, nt1, slip2_cm, nt2, slip3_cm, nt3))
         np.savetxt(fout, sliprate_cm, fmt='%.18e')
         fout.close()
+
+    def get_local_shear_modulus(self, lat, lon, depth):
+        try:
+            fname = 'rhomulambda-inner.nc'
+            data = nc.Dataset(fname, 'r')
+            x = data.variables['x'][:]
+            y = data.variables['y'][:]
+            z = data.variables['z'][:]
+            mu = data.variables['data'][:]['mu']
+            interp = RegularGridInterpolator((z, y, x), mu)
+            sProj = \
+                '+proj=utm +zone=11 +ellps=WGS84 +datum=WGS84 +units=m +no_defs'
+            transformer = Transformer.from_crs('epsg:4326', sProj, always_xy=True)
+            utmx, utmy = transformer.transform(lon, lat)
+            return float(interp((-depth, utmy, utmx)))
+        except FileNotFoundError:
+            if depth <= 10.0e3:
+                return 1.04e10
+            else:
+                return 3.23980992e10

@@ -4,12 +4,12 @@ import matplotlib.pyplot as plt
 from neighborhood.search import Searcher
 
 
-def voronoi_sample(points, min_vals, max_vals, errors, n_samples_refine):
+def voronoi_sample(points, min_vals, max_vals, errors, n_samples_refine, n_cells_refine):
     logging.info('Using Voronoi sampling.')
     limits = [(minval, maxval) for minval, maxval in zip(min_vals, max_vals)]
     search = Searcher(
         objective=lambda: None, limits=limits, num_samp=n_samples_refine,
-        num_resamp=1)
+        num_resamp=n_cells_refine)
     search._sample = [{'param': param, 'result': error}
                       for param, error in zip(points, errors)]
     search._sample.sort(key=lambda x: x['result'], reverse=True)
