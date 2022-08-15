@@ -43,7 +43,7 @@ source_params = {
 class SeisSolSimulator():
     def __init__(self, par_file, sim_job_file, prefix,
                  max_jobs, t_per_sim, t_max_per_job, take_log_imt,
-                 mesh_coords, remote=None, netcdf_files=[])):
+                 mesh_coords, remote=None, netcdf_files=[]):
         self.par_file = par_file
         self.sim_job_file = sim_job_file
         self.prefix = prefix
@@ -89,10 +89,10 @@ class SeisSolSimulator():
         crds = self.mesh_coords
         xcenter = crds['LL_UTM_E'] + (crds['LX'] / 2)
         ycenter = crds['LL_UTM_N'] + (crds['LY'] / 2)
-        xmin = xcenter - (crds['AOI_L'] / 2)
-        xmax = xcenter + (crds['AOI_L'] / 2)
-        ymin = ycenter - (crds['AOI_L'] / 2)
-        ymax = ycenter + (crds['AOI_L'] / 2)
+        xmin = xcenter - (crds['LX'] / 2)
+        xmax = xcenter + (crds['LX'] / 2)
+        ymin = ycenter - (crds['LY'] / 2)
+        ymax = ycenter + (crds['LY'] / 2)
         logging.info('Coordinates of the area of interest: %s %s %s %s ' % (
             xmin, xmax, ymin, ymax))
         for i, element in enumerate(connect):
