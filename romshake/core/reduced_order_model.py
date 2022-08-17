@@ -53,14 +53,14 @@ class ReducedOrderModel():
         self.remote = remote
         self.folder = folder
 
-    def update(self, newX, newy):
+    def update(self, newX, newy, use_remote):
         """Updates an existing reduced order model with new parameters/data.
 
         Args:
             newX (array): New parameter array.
             newy (array): New data array.
         """
-        if self.remote:
+        if use_remote:
             return self.launch_remote_grid_search()
         else:
             if hasattr(self, 'X') and self.X.size != 0:

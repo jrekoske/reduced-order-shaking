@@ -22,7 +22,8 @@ class NumericalRomBuilder():
     def __init__(
             self, folder, simulator, rom, n_seeds_initial,
             n_seeds_refine, n_seeds_stop, samp_method, bounds, clear,
-            desired_score, make_test_figs, remote=None, n_cells_refine=None):
+            desired_score, make_test_figs, remote=None, n_cells_refine=None,
+            use_remote=False):
         """Class for building reduced-order models from numerical simulations.
 
         Args:
@@ -61,6 +62,7 @@ class NumericalRomBuilder():
         self.halton_sampler = qmc.Halton(d=self.dim, seed=0)
         self.desired_score = desired_score
         self.make_test_figs = make_test_figs
+        self.use_remote = use_remote
 
         if not os.path.exists(folder):
             os.makedirs(folder)
@@ -177,7 +179,7 @@ class NumericalRomBuilder():
                     self.samp_method, self.n_seeds_refine)
             new_params, new_data = self.run_forward_models(
                 new_params, new_indices)
-            self.rom = self.rom.update(new_params, new_data.T)
+            self.rom = self.rom.update(new_params, new_data.T, self.use_remote)
             logging.info(
                 'The best score is %.3g with the estimator %s.' %
                 (self.rom.search.best_score_, self.rom.search.best_estimator_))
