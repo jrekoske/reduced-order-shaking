@@ -6,9 +6,10 @@ from scipy.ndimage import gaussian_filter
 from openquake.hazardlib.contexts import SitesContext, DistancesContext
 from openquake.hazardlib.imt import PGV
 from openquake.hazardlib.const import StdDev
+from openquake.hazardlib.gsim import get_available_gsims
 
-from shakelib.rupture.quad_rupture import QuadRupture
-from shakelib.rupture.origin import Origin
+from impactutils.rupture.quad_rupture import QuadRupture
+from impactutils.rupture.origin import Origin
 
 warnings.filterwarnings('ignore')
 
@@ -27,7 +28,7 @@ default_source_params = {
 
 class GMPE_Simulator():
     def __init__(self, gmpe, add_noise, noise_scale=None, sigmax=None,
-                 sigmay=None):
+                 sigmay=None, **kwargs):
         """Creates a GMPE Simulator object.
 
         Args:
@@ -35,7 +36,8 @@ class GMPE_Simulator():
             add_noise (bool): Whether to add noise to GMPE result.
             noise_scale (float): Value to scale noise.
         """
-        self.gmpe = gmpe
+
+        self.gmpe = get_available_gsims()[gmpe]()
         self.add_noise = add_noise
         self.noise_scale = noise_scale
         self.sigmax = sigmax

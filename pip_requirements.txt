@@ -2,4 +2,3 @@ gmsh
 neighborhood
 seissolxdmf
 seissolxdmfwriter
-scikeras

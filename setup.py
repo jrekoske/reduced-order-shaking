@@ -7,5 +7,6 @@ setup(
     author='John Rekoske',
     author_email='jrekoske@ucsd.edu',
     url='https://github.com/jrekoske/reduced-order-shaking',
-    packages=find_packages(include=['romshake', 'romshake.*'])
+    packages=find_packages(include=['romshake', 'romshake.*']),
+    scripts=['romshake/bin/build_rom']
 )

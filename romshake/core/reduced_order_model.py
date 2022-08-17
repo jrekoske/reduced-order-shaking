@@ -3,18 +3,21 @@ import pickle
 import logging
 import numpy as np
 from joblib import Memory
-from tensorflow import keras
 from sklearn import preprocessing
 from sklearn.pipeline import Pipeline
-from scikeras.wrappers import KerasRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import train_test_split
 from sklearn.compose import TransformedTargetRegressor
 
+# For GPU
+# from tensorflow import keras
+# from scikeras.wrappers import KerasRegressor
+
 from sklearn.decomposition import TruncatedSVD
 from sklearn.ensemble import RandomForestRegressor  # NOQA
 from sklearn.neighbors import KNeighborsRegressor  # NOQA
+from sklearn.neural_network import MLPRegressor  # NOQA
 
 from romshake.core.rbf_regressor import RBFRegressor
 from romshake.core.remote_controller import copy_file
@@ -36,7 +39,7 @@ class ReducedOrderModel():
         """
         self.hyper_params = []
         for rname, hypers in regressors.items():
-            if rname == 'NeuralNetwork':
+            if rname == 'KerasNeuralNetwork':
                 rdict = {'regressor__reg':  [KerasRegressor(
                     get_nn_model, loss='mse', optimizer='adam', **hypers)]}
             else:
@@ -50,14 +53,14 @@ class ReducedOrderModel():
         self.remote = remote
         self.folder = folder
 
-    def update(self, newX, newy, use_remote=True):
+    def update(self, newX, newy):
         """Updates an existing reduced order model with new parameters/data.
 
         Args:
             newX (array): New parameter array.
             newy (array): New data array.
         """
-        if use_remote:
+        if self.remote:
             return self.launch_remote_grid_search()
         else:
             if hasattr(self, 'X') and self.X.size != 0:
@@ -75,14 +78,14 @@ class ReducedOrderModel():
                 self.X, self.y, test_size=self.test_size)
         regressor = Pipeline(
             steps=[('scaler', StandardScaler()), ('reg', RBFRegressor())])
-        memory = Memory(location='cachedir', verbose=10)
+        memory = Memory(location='cachedir', verbose=0)
         transformer = Pipeline([
             ('svd', TruncatedSVD()),
             ('yscaler', preprocessing.StandardScaler())], memory=memory)
         trans_regr = TransformedTargetRegressor(
             regressor=regressor, transformer=transformer, check_inverse=False)
         search = GridSearchCV(trans_regr, self.hyper_params,
-                              scoring=self.scoring, n_jobs=-1, verbose=4)
+                              scoring=self.scoring, n_jobs=-1, verbose=2)
         logging.info('Starting grid search of model hyperparameters.')
         search.fit(self.X_train, self.y_train)
         logging.info('The best parameters are: %s' % search.best_params_)
@@ -91,6 +94,7 @@ class ReducedOrderModel():
         logging.info('The score on the testing data is: %s' % test_score)
         self.y_pred = search.predict(self.X_test)
         self.search = search
+        memory.clear(warn=False)
 
     def launch_remote_grid_search(self):
         job_dir = os.path.join(self.folder, 'jobs')

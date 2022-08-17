@@ -1,5 +1,4 @@
 cartopy
-dask-ml
 h5py
 matplotlib
 netcdf4
@@ -14,6 +13,5 @@ rasterio
 scikit-learn=1.0.2
 scipy
 setuptools
-tensorflow
 tqdm
 trimesh

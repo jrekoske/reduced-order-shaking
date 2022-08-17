@@ -1,10 +1,13 @@
+import os
 import logging
 import numpy as np
 import matplotlib.pyplot as plt
 from neighborhood.search import Searcher
 
 
-def voronoi_sample(points, min_vals, max_vals, errors, n_samples_refine, n_cells_refine):
+def voronoi_sample(
+        points, min_vals, max_vals, errors, n_samples_refine, n_cells_refine,
+        folder):
     logging.info('Using Voronoi sampling.')
     limits = [(minval, maxval) for minval, maxval in zip(min_vals, max_vals)]
     search = Searcher(
@@ -16,10 +19,8 @@ def voronoi_sample(points, min_vals, max_vals, errors, n_samples_refine, n_cells
     search._neighborhood_sample()
     newX = np.array(search._queue)
     size = 3 * points.shape[1]
-    try:
-        search.plot(size=(size, size), filename='voronoi_%s.pdf' %
-                    points.shape[0])
-    except:
-        logging.info('Failed to make the plot.')
+    search.plot(
+        size=(size, size), filename=os.path.join(
+            folder, 'voronoi_%s.png' % points.shape[0]))
     plt.close('all')
     return newX

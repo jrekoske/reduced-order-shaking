@@ -1,14 +1,18 @@
 import os
+import sys
 import shutil
 import pickle
 import logging
-import sys
 import numpy as np
 import pandas as pd
 from scipy.stats import qmc
 from matplotlib import pyplot as plt
 from sklearn.metrics import mean_squared_error
+
 from romshake.sample import voronoi
+from romshake.core.simulator import Simulator
+from romshake.core.remote_controller import RemoteController
+from romshake.core.reduced_order_model import ReducedOrderModel
 
 FNAME = 'rom_builder.pkl'
 LOG_FILE = 'output.log'
@@ -16,9 +20,9 @@ LOG_FILE = 'output.log'
 
 class NumericalRomBuilder():
     def __init__(
-            self, folder, simulator, rom, remote, n_seeds_initial,
-            n_seeds_refine, n_cells_refine, n_seeds_stop, samp_method, bounds, clear,
-            desired_score, make_test_figs):
+            self, folder, simulator, rom, n_seeds_initial,
+            n_seeds_refine, n_seeds_stop, samp_method, bounds, clear,
+            desired_score, make_test_figs, remote=None, n_cells_refine=None):
         """Class for building reduced-order models from numerical simulations.
 
         Args:
@@ -43,9 +47,10 @@ class NumericalRomBuilder():
         """
 
         self.folder = folder
-        self.simulator = simulator
-        self.rom = rom
-        self.remote = remote
+        if remote:
+            self.remote = RemoteController(**remote, folder=folder)
+        self.simulator = Simulator(**simulator, remote=remote)
+        self.rom = ReducedOrderModel(**rom, remote=remote, folder=folder)
         self.n_seeds_initial = n_seeds_initial
         self.n_seeds_refine = n_seeds_refine
         self.n_cells_refine = n_cells_refine
@@ -106,7 +111,7 @@ class NumericalRomBuilder():
                 self.rom.y_pred, self.rom.y_test)]
             samples = voronoi.voronoi_sample(
                 self.rom.X_test, min_vals, max_vals, errors, n_samps,
-                self.n_cells_refine)
+                self.n_cells_refine, self.folder)
 
         # Discard any samples that we already have run.
         if hasattr(self.rom, 'X'):
@@ -170,7 +175,7 @@ class NumericalRomBuilder():
                 new_params, new_indices)
             self.rom = self.rom.update(new_params, new_data.T)
             logging.info(
-                'The best score is %s with the estimator %s.' %
+                'The best score is %.3g with the estimator %s.' %
                 (self.rom.search.best_score_, self.rom.search.best_estimator_))
             self.save_results()
             nseeds = self.rom.X.shape[0]
@@ -196,7 +201,8 @@ class NumericalRomBuilder():
             self.score_history = [self.rom.search.best_score_]
         logging.info('The number of samples history is: %s' %
                      self.nsamples_history)
-        logging.info('The score history is: %s' % self.score_history)
+        logging.info('The score history is: %s' % [
+            '%.3g' % i for i in self.score_history])
         with open(os.path.join(self.folder, FNAME), 'wb') as outp:
             pickle.dump(self, outp)
         if self.make_test_figs:
@@ -226,8 +232,8 @@ class NumericalRomBuilder():
                 else:
                     vmin = min(data[0][i].min(), data[1][i].min())
                     vmax = max(data[0][i].max(), data[1][i].max())
-                self.simulator.plot_snapshot(ax, ds[i], vmin=vmin, vmax=vmax,
-                                             title=title, cmap=cmap)
+                self.simulator.simulator.plot_snapshot(
+                    ax, ds[i], vmin=vmin, vmax=vmax, title=title, cmap=cmap)
             fig.tight_layout()
             fig.savefig(os.path.join(
                 odir, 'pred_%s.png' % self.rom.X_test[i]), dpi=100)

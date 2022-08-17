@@ -1,3 +1,5 @@
 cudnn
 cudatoolkit
 cuml
+scikeras
+tensorflow
