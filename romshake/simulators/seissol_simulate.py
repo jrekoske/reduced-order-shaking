@@ -87,12 +87,13 @@ class SeisSolSimulator():
         imts.remove('geometry')
         elem_mask = np.zeros(connect.shape[0], dtype=bool)
         crds = self.mesh_coords
-        xcenter = crds['LL_UTM_E'] + (crds['LX'] / 2)
-        ycenter = crds['LL_UTM_N'] + (crds['LY'] / 2)
-        xmin = xcenter - (crds['LX'] / 2)
-        xmax = xcenter + (crds['LX'] / 2)
-        ymin = ycenter - (crds['LY'] / 2)
-        ymax = ycenter + (crds['LY'] / 2)
+        xcenter = crds['CX']
+        ycenter = crds['CY']
+        aoi_l = crds['AOI_L']
+        xmin = xcenter - aoi_l / 2
+        xmax = xcenter + aoi_l / 2
+        ymin = ycenter - aoi_l / 2
+        ymax = ycenter + aoi_l / 2
         logging.info('Coordinates of the area of interest: %s %s %s %s ' % (
             xmin, xmax, ymin, ymax))
         for i, element in enumerate(connect):

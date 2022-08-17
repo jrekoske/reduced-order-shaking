@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
+import os
 import yaml
 import argparse
-from romshake.core.numerical_rom_builder import NumericalRomBuilder
+from romshake.core.numerical_rom_builder import NumericalRomBuilder, FNAME
 
 
 def main():
@@ -12,7 +13,13 @@ def main():
     args = parser.parse_args()
     with open(args.config, 'r') as f:
         config = yaml.safe_load(f)
-    nrb = NumericalRomBuilder(**config)
+    print(os.path.exists(os.path.join(config['folder'], FNAME)))
+    if os.path.exists(
+            os.path.join(config['folder'], FNAME)) and ~config['clear']:
+        nrb = NumericalRomBuilder.from_folder(config['folder'])
+        nrb.n_seeds_stop = config['n_seeds_stop']
+    else:
+        nrb = NumericalRomBuilder(**config)
     nrb.train()
 
 

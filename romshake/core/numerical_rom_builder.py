@@ -49,8 +49,8 @@ class NumericalRomBuilder():
         self.folder = folder
         if remote:
             self.remote = RemoteController(**remote, folder=folder)
-        self.simulator = Simulator(**simulator, remote=remote)
-        self.rom = ReducedOrderModel(**rom, remote=remote, folder=folder)
+        self.simulator = Simulator(**simulator, remote=self.remote)
+        self.rom = ReducedOrderModel(**rom, remote=self.remote, folder=folder)
         self.n_seeds_initial = n_seeds_initial
         self.n_seeds_refine = n_seeds_refine
         self.n_cells_refine = n_cells_refine
@@ -86,6 +86,7 @@ class NumericalRomBuilder():
 
     @classmethod
     def from_folder(cls, folder):
+        logging.info('Loading existing ROM builder from folder %s.' % folder)
         with open(os.path.join(folder, FNAME), 'rb') as f:
             return pickle.load(f)
 
@@ -162,7 +163,10 @@ class NumericalRomBuilder():
         else:
             nseeds = 0
             best_score = -1e10  # aribtrary to make it work
+        print('training the rom')
+        print(nseeds, self.n_seeds_stop)
         while (nseeds < self.n_seeds_stop and best_score < self.desired_score):
+            print('in loop')
             logging.info(
                 'Current number of simulations: %s', nseeds)
             if nseeds == 0:
