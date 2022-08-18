@@ -2,6 +2,7 @@ cartopy
 flake8
 h5py
 impactutils
+lxml
 matplotlib
 netcdf4
 numpy
