@@ -123,6 +123,7 @@ class ReducedOrderModel():
 
 # Keras neural network model
 def get_nn_model(hidden_layer_dim, n_hidden_layers, meta):
+    from tensorflow import keras
     n_features_in_ = meta['n_features_in_']
     X_shape_ = meta['X_shape_']
     n_outputs_ = meta['n_outputs_']
