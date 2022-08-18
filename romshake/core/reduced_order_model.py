@@ -53,7 +53,7 @@ class ReducedOrderModel():
         self.remote = remote
         self.folder = folder
 
-    def update(self, newX, newy, use_remote):
+    def update(self, newX, newy, use_remote, append=True):
         """Updates an existing reduced order model with new parameters/data.
 
         Args:
@@ -63,7 +63,7 @@ class ReducedOrderModel():
         if use_remote:
             return self.launch_remote_grid_search()
         else:
-            if hasattr(self, 'X') and self.X.size != 0:
+            if hasattr(self, 'X') and self.X.size != 0 and append:
                 self.X = np.concatenate((self.X, newX))
                 self.y = np.concatenate((self.y, newy))
             else:

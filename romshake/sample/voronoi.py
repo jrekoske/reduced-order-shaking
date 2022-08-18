@@ -19,8 +19,11 @@ def voronoi_sample(
     search._neighborhood_sample()
     newX = np.array(search._queue)
     size = 3 * points.shape[1]
-    search.plot(
-        size=(size, size), filename=os.path.join(
-            folder, 'voronoi_%s.png' % points.shape[0]))
-    plt.close('all')
+    try:
+        search.plot(
+            size=(size, size), filename=os.path.join(
+                folder, 'voronoi_%s.png' % points.shape[0]))
+        plt.close('all')
+    except:
+        pass
     return newX

@@ -1,5 +1,4 @@
 import os
-import sys
 import shutil
 import pickle
 import logging
@@ -15,13 +14,12 @@ from romshake.core.remote_controller import RemoteController
 from romshake.core.reduced_order_model import ReducedOrderModel
 
 FNAME = 'rom_builder.pkl'
-LOG_FILE = 'output.log'
 
 
 class NumericalRomBuilder():
     def __init__(
             self, folder, simulator, rom, n_seeds_initial,
-            n_seeds_refine, n_seeds_stop, samp_method, bounds, clear,
+            n_seeds_refine, n_seeds_stop, samp_method, bounds,
             desired_score, make_test_figs, remote=None, n_cells_refine=None,
             use_remote=False):
         """Class for building reduced-order models from numerical simulations.
@@ -50,6 +48,8 @@ class NumericalRomBuilder():
         self.folder = folder
         if remote:
             self.remote = RemoteController(**remote, folder=folder)
+        else:
+            self.remote = None
         self.simulator = Simulator(**simulator, remote=self.remote)
         self.rom = ReducedOrderModel(**rom, remote=self.remote, folder=folder)
         self.n_seeds_initial = n_seeds_initial
@@ -63,28 +63,6 @@ class NumericalRomBuilder():
         self.desired_score = desired_score
         self.make_test_figs = make_test_figs
         self.use_remote = use_remote
-
-        if not os.path.exists(folder):
-            os.makedirs(folder)
-        else:
-            if clear:
-                shutil.rmtree(folder)
-                os.makedirs(folder)
-            else:
-                raise ValueError(
-                    'A ROM builder has already been started in the folder %s.'
-                    ' You should load that instead.' % folder)
-
-        # Set  up the logger
-        logfile = os.path.join(folder, LOG_FILE)
-        file_handler = logging.FileHandler(filename=logfile)
-        stdout_handler = logging.StreamHandler(stream=sys.stdout)
-        handlers = [file_handler, stdout_handler]
-
-        logging.basicConfig(
-            level=logging.DEBUG,
-            format='%(asctime)s %(message)s', handlers=handlers)
-        logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
     @classmethod
     def from_folder(cls, folder):
@@ -165,10 +143,7 @@ class NumericalRomBuilder():
         else:
             nseeds = 0
             best_score = -1e10  # aribtrary to make it work
-        print('training the rom')
-        print(nseeds, self.n_seeds_stop)
         while (nseeds < self.n_seeds_stop and best_score < self.desired_score):
-            print('in loop')
             logging.info(
                 'Current number of simulations: %s', nseeds)
             if nseeds == 0:
@@ -233,7 +208,7 @@ class NumericalRomBuilder():
         titles = ['Truth', 'Predicted', 'Error']
         cmaps = [None, None, 'bwr']
         for i in range(self.rom.y_test.shape[0]):
-            fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(12, 3))
+            fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(16, 4))
             for ax, ds, title, cmap in zip(axes, data, titles, cmaps):
                 if ax == axes[-1]:
                     absmax = abs(ds[i]).max()

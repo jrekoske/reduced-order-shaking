@@ -1,21 +1,44 @@
 #!/usr/bin/env python3
 import os
+import sys
 import yaml
+import shutil
+import logging
 import argparse
 from romshake.core.numerical_rom_builder import NumericalRomBuilder, FNAME
+
+LOG_FILE = 'output.log'
 
 
 def main():
     description = '''Builds a reduced-order model for a defined forward
     problem, which can be an analytic function or a numerical simulation.'''
     parser = argparse.ArgumentParser(description=description)
-    parser.add_argument('config', help='Configuration file', type=str)
+    parser.add_argument('config', help='Configuration file.', type=str)
+    parser.add_argument(
+        '--wipe', help='Wipes the target folder (if it exists)'
+        'before the ROM is built.', default=False, action='store_true')
     args = parser.parse_args()
     with open(args.config, 'r') as f:
         config = yaml.safe_load(f)
-    print(os.path.exists(os.path.join(config['folder'], FNAME)))
-    if os.path.exists(
-            os.path.join(config['folder'], FNAME)) and ~config['clear']:
+
+    folder = config['folder']
+    if args.wipe:
+        shutil.rmtree(folder)
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+
+    # Set  up the logger (both to file and stdout)
+    logfile = os.path.join(config['folder'], LOG_FILE)
+    file_handler = logging.FileHandler(filename=logfile)
+    stdout_handler = logging.StreamHandler(stream=sys.stdout)
+    handlers = [file_handler, stdout_handler]
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s %(message)s', handlers=handlers)
+    logging.getLogger('matplotlib').setLevel(logging.WARNING)
+
+    if os.path.exists(os.path.join(folder, FNAME)):
         nrb = NumericalRomBuilder.from_folder(config['folder'])
         nrb.n_seeds_stop = config['n_seeds_stop']
     else:
