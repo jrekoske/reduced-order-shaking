@@ -7,6 +7,9 @@ conda activate base
 # Remove virtual environmnent if it exists
 conda remove -y --name $VENV --all
 
+# Install mamba
+conda install mamba -y
+
 # Create environment and install conda packages
 if  [[ $1 = "-gpu" ]]; then
     mamba create -n $VENV -y --file=conda_requirements.txt --file=gpu_requirements.txt -c conda-forge -c nvidia -c rapidsai -vvv
