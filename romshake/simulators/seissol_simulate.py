@@ -130,10 +130,6 @@ class SeisSolSimulator():
         # Return empty arrays because we don't need the data locally
         return (np.array([]), np.array([]))
 
-    def plot_snapshot(self, ax, snap, vmin, vmax, title, cmap, **kwargs):
-
-
-
     def plot_data(self, successful_indices, folder, **kwargs):
         data = self.load_data(folder, successful_indices)
         for i in range(len(successful_indices)):
