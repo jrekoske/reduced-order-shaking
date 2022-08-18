@@ -1,4 +1,5 @@
 cartopy
+flake8
 h5py
 impactutils
 matplotlib
@@ -8,11 +9,13 @@ openquake.engine
 pandas
 paramiko
 pyproj
-python
+python=3.9
 pyyaml
+pytest
 rasterio
-scikit-learn=1.0.2
+scikit-learn
 scipy
 setuptools
 tqdm
 trimesh
+yaml
