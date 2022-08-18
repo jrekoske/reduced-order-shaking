@@ -9,7 +9,7 @@ openquake.engine
 pandas
 paramiko
 pyproj
-python
+python=3.9
 pyyaml
 pytest
 rasterio
