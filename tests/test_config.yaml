@@ -1,0 +1,32 @@
+folder: test
+simulator:
+  sim_type: gmpe
+  gmpe: AbrahamsonEtAl2014
+  add_noise: False
+rom:
+  regressors:
+    RBFRegressor:
+      kernel: [thin_plate_spline, quintic]
+      smoothing: [0.0, 0.1]
+    KNeighborsRegressor:
+      n_neighbors: [3, 5]
+    MLPRegressor:
+      hidden_layer_sizes:
+        - [10, 10]
+      learning_rate: [adaptive]
+      max_iter: [5000]
+    RandomForestRegressor:
+      n_estimators: [50]
+  svd_ncomps: [5, 10]
+  test_size: 0.2
+  scoring: neg_mean_squared_error
+n_seeds_initial: 50
+n_seeds_refine: 50
+n_cells_refine: 5
+n_seeds_stop: 100
+samp_method: voronoi
+bounds:
+  depth: [0.0, 1.0]
+  strike: [0.0, 1.0]
+desired_score: 0.0
+make_test_figs: True

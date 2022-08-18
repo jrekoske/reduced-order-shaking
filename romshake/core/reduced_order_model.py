@@ -9,11 +9,6 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import train_test_split
 from sklearn.compose import TransformedTargetRegressor
-
-# For GPU
-from tensorflow import keras
-from scikeras.wrappers import KerasRegressor
-
 from sklearn.decomposition import TruncatedSVD
 from sklearn.ensemble import RandomForestRegressor  # NOQA
 from sklearn.neighbors import KNeighborsRegressor  # NOQA
@@ -40,6 +35,7 @@ class ReducedOrderModel():
         self.hyper_params = []
         for rname, hypers in regressors.items():
             if rname == 'KerasNeuralNetwork':
+                from scikeras.wrappers import KerasRegressor
                 rdict = {'regressor__reg':  [KerasRegressor(
                     get_nn_model, loss='mse', optimizer='adam', **hypers)]}
             else:
