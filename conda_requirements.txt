@@ -16,3 +16,4 @@ scipy
 setuptools
 tqdm
 trimesh
+yaml

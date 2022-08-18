@@ -14,7 +14,7 @@ conda install -c conda-forge mamba -y
 if  [[ $1 = "-gpu" ]]; then
     mamba create -n $VENV -y --file=conda_requirements.txt --file=gpu_requirements.txt -c conda-forge -c nvidia -c rapidsai -vvv
 else
-    mamba create -n $VENV -y --file conda_requirements.txt -c conda-forge
+    mamba create -n $VENV -y --file conda_requirements.txt -c conda-forge -c anaconda
 fi
 
 # End if conda create command fails.
