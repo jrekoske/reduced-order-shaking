@@ -43,7 +43,7 @@ pip install -r pip_requirements.txt
 mkdir -p $CONDA_PREFIX/etc/conda/activate.d
 echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CONDA_PREFIX/lib/' > $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
 
-# Instal this repository
+# Install this repository
 pip install --no-deps -e .
 
 # End if pip install fails
