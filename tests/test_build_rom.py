@@ -1,13 +1,17 @@
 import os
+import yaml
 import shutil
-import subprocess
+from romshake.core.numerical_rom_builder import NumericalRomBuilder
 
 
 def test_build_rom():
-    ret = subprocess.call(['build_rom', 'test_config.yaml'])
+    with open('test_config.yaml', 'r') as f:
+        config = yaml.safe_load(f)
+    os.makedirs('test')
+    nrb = NumericalRomBuilder(**config)
+    nrb.train()
     shutil.rmtree('test')
     shutil.rmtree('cachedir')
-    assert (ret == 0)
 
 
 if __name__ == '__main__':
