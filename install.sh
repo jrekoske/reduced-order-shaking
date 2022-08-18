@@ -8,7 +8,7 @@ conda activate base
 conda remove -y --name $VENV --all
 
 # Install mamba
-conda install mamba -y
+conda install -c conda-forge mamba -y
 
 # Create environment and install conda packages
 if  [[ $1 = "-gpu" ]]; then
