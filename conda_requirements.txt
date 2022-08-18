@@ -1,4 +1,5 @@
 cartopy
+flake8
 h5py
 impactutils
 matplotlib
@@ -10,6 +11,7 @@ paramiko
 pyproj
 python
 pyyaml
+pytest
 rasterio
 scikit-learn=1.0.2
 scipy
