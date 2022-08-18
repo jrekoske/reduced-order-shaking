@@ -11,8 +11,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.compose import TransformedTargetRegressor
 
 # For GPU
-# from tensorflow import keras
-# from scikeras.wrappers import KerasRegressor
+from tensorflow import keras
+from scikeras.wrappers import KerasRegressor
 
 from sklearn.decomposition import TruncatedSVD
 from sklearn.ensemble import RandomForestRegressor  # NOQA
