@@ -7,9 +7,10 @@ import logging
 import subprocess
 import numpy as np
 import netCDF4 as nc
-from matplotlib import pyplot as plt
 from pyproj import Transformer
+from matplotlib import pyplot as plt
 from scripts.mesh_plot import triplot
+from seissolxdmf import seissolxdmf as sx
 from scipy.interpolate import RegularGridInterpolator
 from romshake.core.remote_controller import SLEEPY_TIME
 from romshake.simulators.reorder_elements import run_reordering
@@ -17,6 +18,7 @@ from romshake.simulators.reorder_elements import run_reordering
 imt = 'PGV'
 mask_file = 'mask.npy'
 h5_gm_cor_file = 'loh1-GME_corrected.h5'
+xdmf_cor_file = 'loh1-GME_corrected.xdmf'
 seissol_exe = 'SeisSol_Release_dskx_4_elastic'
 gm_exe = ('/dss/dsshome1/0B/di46bak/SeisSol/postprocessing/science/'
           'GroundMotionParametersMaps/ComputeGroundMotionParameters'
@@ -75,6 +77,18 @@ class SeisSolSimulator():
             all_data.append(data)
         return np.array(all_data).T
 
+    def load_coords(self, folder, idx):
+        mask_path = os.path.join(folder, mask_file)
+        if os.path.exists(mask_path):
+            elem_mask = np.load(mask_path)
+        else:
+            elem_mask = self.make_mask(folder, mask_path)
+        ds = sx(os.path.join(folder, 'data', str(idx), xdmf_cor_file))
+        geo = ds.ReadGeometry()
+        connect = ds.ReadConnect()
+        coords = geo[connect].mean(axis=1)[elem_mask]
+        return coords
+
     def make_mask(self, folder, mask_path):
         logging.info('Creating mask.')
         ref_idx = self.get_ref_idx(folder)
@@ -115,6 +129,10 @@ class SeisSolSimulator():
         self.remote.run_jobs(job_indices)
         # Return empty arrays because we don't need the data locally
         return (np.array([]), np.array([]))
+
+    def plot_snapshot(self, ax, snap, vmin, vmax, title, cmap, **kwargs):
+
+
 
     def plot_data(self, successful_indices, folder, **kwargs):
         data = self.load_data(folder, successful_indices)
