@@ -226,6 +226,10 @@ class NumericalRomBuilder():
     def plot_predictions(self, odir):
         data = [self.rom.y_test, self.rom.y_pred,
                 self.rom.y_test - self.rom.y_pred]
+        try:
+            coords = self.rom.coords
+        except AttributeError:
+            coords = None
         titles = ['Truth', 'Predicted', 'Error']
         cmaps = [None, None, 'bwr']
         for i in range(self.rom.y_test.shape[0]):
@@ -239,7 +243,8 @@ class NumericalRomBuilder():
                     vmin = min(data[0][i].min(), data[1][i].min())
                     vmax = max(data[0][i].max(), data[1][i].max())
                 self.simulator.simulator.plot_snapshot(
-                    ax, ds[i], vmin=vmin, vmax=vmax, title=title, cmap=cmap)
+                    ax, ds[i], vmin=vmin, vmax=vmax, title=title, cmap=cmap,
+                    coords=coords)
             fig.tight_layout()
             fig.savefig(os.path.join(
                 odir, 'pred_%s.png' % self.rom.X_test[i]), dpi=100)

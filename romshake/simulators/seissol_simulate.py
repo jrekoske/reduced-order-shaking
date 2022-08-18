@@ -9,7 +9,6 @@ import numpy as np
 import netCDF4 as nc
 from pyproj import Transformer
 from matplotlib import pyplot as plt
-from scripts.mesh_plot import triplot
 from seissolxdmf import seissolxdmf as sx
 from scipy.interpolate import RegularGridInterpolator
 from romshake.core.remote_controller import SLEEPY_TIME
@@ -130,29 +129,16 @@ class SeisSolSimulator():
         # Return empty arrays because we don't need the data locally
         return (np.array([]), np.array([]))
 
-    def plot_data(self, successful_indices, folder, **kwargs):
-        data = self.load_data(folder, successful_indices)
-        for i in range(len(successful_indices)):
-            idx = successful_indices[i]
-            plotdata = data.T[i]
-            fig, ax = plt.subplots(figsize=(5, 5))
-            h5f = h5py.File(os.path.join(
-                folder, 'data', str(
-                    successful_indices[0]), h5_gm_cor_file), 'r')
-            geom = np.array(h5f['geometry'])
-            connect = np.array(h5f['connect'])
-            nodes = np.array(geom)
-            x, y = nodes[:, 0], nodes[:, 1]
-            mask_path = os.path.join(folder, mask_file)
-            elem_mask = np.load(mask_path)
-            im = triplot(
-                x, y, np.array(connect)[elem_mask],
-                plotdata, ax, edgecolor='face', **kwargs)
-            fig.colorbar(im, label='logPGV')
-            fig_dir = os.path.join(folder, 'figs')
-            if not os.path.exists(fig_dir):
-                os.makedirs(fig_dir)
-            fig.savefig(os.path.join(fig_dir, '%s.png' % idx), dpi=300)
+    def plot_snapshot(
+            self, ax, snap, vmin, vmax, title, cmap, coords, **kwargs):
+        im = ax.tricontourf(
+            coords.T[0],
+            coords.T[1],
+            snap, vmin=vmin, vmax=vmax, cmap=cmap)
+        ax.set_xlabel('Easting')
+        ax.set_ylabel('Northing')
+        ax.set_title(title)
+        plt.colorbar(im, ax=ax, label='log(PGV)')
 
     def make_puml_file(self, folder):
         wdir = '%s%s' % (self.remote.scratch_dir, folder)
@@ -331,9 +317,10 @@ class SeisSolSimulator():
             z = data.variables['z'][:]
             mu = data.variables['data'][:]['mu']
             interp = RegularGridInterpolator((z, y, x), mu)
-            sProj = \
-                '+proj=utm +zone=11 +ellps=WGS84 +datum=WGS84 +units=m +no_defs'
-            transformer = Transformer.from_crs('epsg:4326', sProj, always_xy=True)
+            sProj = ('+proj=utm +zone=11 +ellps=WGS84 +datum=WGS84'
+                     '+units=m +no_defs')
+            transformer = Transformer.from_crs(
+                'epsg:4326', sProj, always_xy=True)
             utmx, utmy = transformer.transform(lon, lat)
             return float(interp((-depth, utmy, utmx)))
         except FileNotFoundError:
