@@ -3,3 +3,5 @@ rom_builder.pkl
 mask.npy
 output.log
 figs
+*.png
+*.pdf
