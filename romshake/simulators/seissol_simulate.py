@@ -1,5 +1,6 @@
 import os
 import time
+import h5py
 import shutil
 import inspect
 import logging
@@ -8,11 +9,24 @@ import numpy as np
 import netCDF4 as nc
 from pyproj import Transformer
 from matplotlib import pyplot as plt
+from seissolxdmf import seissolxdmf as sx
 from scipy.interpolate import RegularGridInterpolator
 from romshake.core.remote_controller import SLEEPY_TIME
+from romshake.simulators.reorder_elements import run_reordering
 
+imt = 'PGV'
+mask_file = 'mask.npy'
+h5_gm_cor_file = 'loh1-GME_corrected.h5'
+xdmf_cor_file = 'loh1-GME_corrected.xdmf'
 seissol_exe = 'SeisSol_Release_dskx_4_elastic'
+gm_exe = ('/dss/dsshome1/0B/di46bak/SeisSol/postprocessing/science/'
+          'GroundMotionParametersMaps/ComputeGroundMotionParameters'
+          'FromSurfaceOutput_Hybrid.py')
+
+# Turn off excessive logging from Paramiko and matplotlib
 logging.getLogger('paramiko').setLevel(logging.WARNING)
+
+# Default earthquake source parameters to use for simulations
 source_params = {
     'M': 5.44,
     'tini': 0.0,
@@ -44,19 +58,63 @@ class SeisSolSimulator():
         self.puml_mesh_file = '%s.puml.h5' % self.prefix
         self.material_file = 'material.yaml'
         self.mesh_coords = mesh_coords
-        self.receiver_file = 'receivers.dat'
-        self.coords = np.genfromtxt(self.receiver_file)
 
     def load_data(self, folder, indices):
         logging.info('Loading data.')
         all_data = []
+        mask_path = os.path.join(folder, mask_file)
+        if os.path.exists(mask_path):
+            elem_mask = np.load(mask_path)
+        else:
+            elem_mask = self.make_mask(folder, mask_path)
         for sim_idx in indices:
-            data = np.array(
-                os.path.join(folder, 'data', str(sim_idx), 'pgv.npy'))
+            h5f = h5py.File(os.path.join(
+                folder, 'data', str(sim_idx), h5_gm_cor_file), 'r')
+            data = np.array(h5f[imt]).flatten()[elem_mask]
             if self.take_log_imt:
                 data = np.log(data)
             all_data.append(data)
         return np.array(all_data).T
+
+    def load_coords(self, folder, idx):
+        mask_path = os.path.join(folder, mask_file)
+        if os.path.exists(mask_path):
+            elem_mask = np.load(mask_path)
+        else:
+            elem_mask = self.make_mask(folder, mask_path)
+        ds = sx(os.path.join(folder, 'data', str(idx), xdmf_cor_file))
+        geo = ds.ReadGeometry()
+        connect = ds.ReadConnect()
+        coords = geo[connect].mean(axis=1)[elem_mask]
+        return coords
+
+    def make_mask(self, folder, mask_path):
+        logging.info('Creating mask.')
+        ref_idx = self.get_ref_idx(folder)
+        h5f = h5py.File(
+            os.path.join(folder, 'data', str(ref_idx), h5_gm_cor_file), 'r')
+        connect = h5f['connect']
+        geom = h5f['geometry']
+        imts = list(h5f.keys())
+        imts.remove('connect')
+        imts.remove('geometry')
+        elem_mask = np.zeros(connect.shape[0], dtype=bool)
+        crds = self.mesh_coords
+        xcenter = crds['CX']
+        ycenter = crds['CY']
+        aoi_l = crds['AOI_L']
+        xmin = xcenter - aoi_l / 2
+        xmax = xcenter + aoi_l / 2
+        ymin = ycenter - aoi_l / 2
+        ymax = ycenter + aoi_l / 2
+        logging.info('Coordinates of the area of interest: %s %s %s %s ' % (
+            xmin, xmax, ymin, ymax))
+        for i, element in enumerate(connect):
+            cx, cy, _ = geom[element].mean(axis=0)
+            if (cx >= xmin and cx <= xmax and cy >= ymin and cy <= ymax):
+                elem_mask[i] = 1.0
+        np.save(mask_path, elem_mask)
+        return elem_mask
 
     def evaluate(self, params_dict, indices, folder, **kwargs):
         self.prepare_common_files(folder)
@@ -68,13 +126,14 @@ class SeisSolSimulator():
         self.sync_files(folder, self.remote.full_scratch_dir, False)
         self.make_puml_file(folder)
         self.remote.run_jobs(job_indices)
+        # Return empty arrays because we don't need the data locally
         return (np.array([]), np.array([]))
 
     def plot_snapshot(
-            self, ax, snap, vmin, vmax, title, cmap, **kwargs):
+            self, ax, snap, vmin, vmax, title, cmap, coords, **kwargs):
         im = ax.tricontourf(
-            self.coords.T[0],
-            self.coords.T[1],
+            coords.T[0],
+            coords.T[1],
             snap, vmin=vmin, vmax=vmax, cmap=cmap)
         ax.set_xlabel('Easting')
         ax.set_ylabel('Northing')
@@ -139,7 +198,9 @@ class SeisSolSimulator():
                     '+zone=11 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"')
                 data.append('\nmpiexec -n $SLURM_NTASKS %s %s' % (
                     seissol_exe, self.par_file))
-                data.append('\npython /hppfs/scratch/0B/di46bak/scripts/compute_pgv.py')
+                data.append(
+                    ('\nsrun python -u %s --periods 1 --MP 48 --lowpass 1.0'
+                     ' output/loh1-surface.xdmf' % gm_exe))
                 data.append('\ncd ..')
             with open(os.path.join(
                     job_dir, 'job%s' % jobidx), 'w') as myfile:
@@ -163,8 +224,39 @@ class SeisSolSimulator():
             time.sleep(SLEEPY_TIME)
 
     def get_successful_indices(self, folder, indices):
-        return [idx for idx in indices if os.path.exists(os.path.join(
-            folder, 'data', str(idx), 'pgv.npy'))]
+        files = [
+            'loh1_lp1.0-GME-surface_cell.h5',
+            'loh1_lp1.0-GME-surface_vertex.h5',
+            'loh1_lp1.0-GME.xdmf']
+        good_indices = []
+        for idx in indices:
+            success = True
+            for file in files:
+                if not os.path.exists(
+                        os.path.join(folder, 'data', str(idx), file)):
+                    success = False
+            if success:
+                good_indices.append(idx)
+        return good_indices
+
+    def reorder_elements(self, folder, indices):
+        logging.info('Correcting element ordering.')
+        idir = os.path.join(folder, 'data')
+
+        ref_idx = self.get_ref_idx(folder)
+        ref_file = os.path.join(idir, str(ref_idx), 'loh1_lp1.0-GME.xdmf')
+
+        for idx in indices:
+            idx = str(idx)
+            file = os.path.join(idir, idx, 'loh1_lp1.0-GME.xdmf')
+            run_reordering(ref_file, file, [-1], ['all'])
+            fname = 'loh1-GME_corrected'
+            h5name = '%s.h5' % fname
+            xdmfname = '%s.xdmf' % fname
+            h5new = os.path.join(idir, idx, h5name)
+            xdmfnew = os.path.join(idir, idx, xdmfname)
+            os.rename(h5name, h5new)
+            os.rename(xdmfname, xdmfnew)
 
     def prepare_common_files(self, folder):
         with open(self.par_file, 'rt') as f:
@@ -174,9 +266,16 @@ class SeisSolSimulator():
         with open(os.path.join(folder, self.par_file), 'wt') as f:
             f.write(data)
         for file in self.netcdf_files + [
-                self.gmsh_mesh_file, self.material_file, self.sim_job_file,
-                self.receiver_file]:
+                self.gmsh_mesh_file, self.material_file, self.sim_job_file]:
             shutil.copyfile(file, os.path.join(folder, file))
+
+    def get_ref_idx(self, folder):
+        idir = os.path.join(folder, 'data')
+        all_indices = sorted([
+            int(idx) for idx in os.listdir(idir) if not idx.startswith('.')])
+        ref_idx = self.get_successful_indices(folder, all_indices)[0]
+        logging.info('Using index %s as the reference.' % ref_idx)
+        return ref_idx
 
     def write_standard_rupture_format(
             self, lon, lat, depth, strike, dip, rake, M, tini, slip1_cm,
