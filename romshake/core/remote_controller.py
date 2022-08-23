@@ -4,7 +4,7 @@ import logging
 import paramiko
 import subprocess
 
-SLEEPY_TIME = 30  # Time to wait between calls (seconds)
+SLEEPY_TIME = 300  # Time to wait between calls (seconds)
 
 
 class RemoteController():
@@ -29,7 +29,7 @@ class RemoteController():
                 logging.info('Executing command %s' % cmd)
                 _, stdout, stderr = ssh.exec_command(cmd)
                 done = True
-            except:
+            except:  # NOQA
                 # try again later when connection is hopefully back
                 logging.info('Unable to make connection so could not execute'
                              ' the command %s. Trying again in %s seconds' % (
