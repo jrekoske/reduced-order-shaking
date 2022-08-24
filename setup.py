@@ -8,5 +8,5 @@ setup(
     author_email='jrekoske@ucsd.edu',
     url='https://github.com/jrekoske/reduced-order-shaking',
     packages=find_packages(include=['romshake', 'romshake.*']),
-    scripts=['romshake/bin/build_rom']
-)
+    scripts=['romshake/bin/build_rom', 'romshake/bin/write_srf',
+             'romshake/bin/compute_pgv'])
