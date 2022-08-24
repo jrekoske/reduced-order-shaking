@@ -14,11 +14,31 @@ from romshake.core.remote_controller import SLEEPY_TIME
 seissol_exe = 'SeisSol_Release_dskx_4_elastic'
 logging.getLogger('paramiko').setLevel(logging.WARNING)
 
+# Default parameters for writing standard rupture format files
+DEFAULT_SOURCE = {
+    'mw': 5.44,
+    'tini': 0.0,
+    'sd': 1.0e6,
+    'lat': 33.949,
+    'lon': -117.766,
+    'depth': 5.0,
+    'strike': 0.0,
+    'dip': 90.0,
+    'rake': 0.0,
+    'mu': 1.0e10,
+    'fname': 'source.srf',
+    'plot': False,
+    'vs': 3464.0,
+    'dt': 0.001,
+    'tmax': 10.0,
+    'k': 0.32}
+PGV_FILE = 'pgv.npy'
+
 
 class SeisSolSimulator():
     def __init__(self, par_file, sim_job_file, prefix,
-                 max_jobs, t_per_sim, t_max_per_job, take_log_imt,
-                 mesh_coords, remote=None, netcdf_files=[]):
+                 max_jobs, t_per_sim, t_max_per_job, take_log_imt, filt_freq,
+                 remote=None, netcdf_files=[]):
         self.par_file = par_file
         self.sim_job_file = sim_job_file
         self.prefix = prefix
@@ -33,14 +53,14 @@ class SeisSolSimulator():
         self.material_file = 'material.yaml'
         self.receiver_file = 'receivers.dat'
         self.coords = np.genfromtxt(self.receiver_file)
-        self.mesh_coords = mesh_coords
+        self.filt_freq = filt_freq
 
     def load_data(self, folder, indices):
         logging.info('Loading data.')
         all_data = []
         for sim_idx in indices:
             data = np.load(
-                os.path.join(folder, 'data', str(sim_idx), 'pgv.npy'))
+                os.path.join(folder, 'data', str(sim_idx), PGV_FILE))
             if self.take_log_imt:
                 data = np.log(data)
             all_data.append(data)
@@ -48,10 +68,6 @@ class SeisSolSimulator():
 
     def evaluate(self, params_dict, indices, folder, **kwargs):
         self.prepare_common_files(folder)
-        # for i, sim_idx in enumerate(indices):
-        #     for param_label, param_vals in params_dict.items():
-        #         source_params[param_label] = param_vals[i]
-        #     self.write_source_files(folder, source_params, sim_idx)
         job_indices = self.prepare_jobs(folder, indices, params_dict)
         self.sync_files(folder, self.remote.full_scratch_dir, False)
         self.make_puml_file(folder)
@@ -77,19 +93,6 @@ class SeisSolSimulator():
             self.remote.issue_remote_command(
                 'cd %s; pumgen %s -s msh2' % (
                     wdir, self.gmsh_mesh_file))
-
-    def write_source_files(self, folder, source_params, sim_idx):
-        sim_dir = os.path.join(folder, 'data', str(sim_idx))
-        odir = os.path.join(sim_dir, 'output')
-        for dir in [sim_dir, odir]:
-            if not os.path.exists(dir):
-                os.makedirs(dir)
-
-        srf_fname = os.path.join(sim_dir, 'source.srf')
-        self.write_standard_rupture_format(**source_params, fname=srf_fname)
-        shutil.copyfile(
-            os.path.join(folder, self.par_file),
-            os.path.join(sim_dir, self.par_file))
 
     def prepare_jobs(self, folder, indices, params_dict):
         logging.info('Preparing job files.')
@@ -120,20 +123,31 @@ class SeisSolSimulator():
                 time.strftime('%H:%M:%S', time.gmtime(job_run_time*3600)))
                 for sub in data]
             data = [sub.replace('jobidx', jobidx) for sub in data]
-            for sim_idx in sims_groups[i]:
+            for j, sim_idx in enumerate(sims_groups[i]):
+                data.append('\nmkdir %s' % sim_idx)
                 data.append('\ncd %s' % sim_idx)
                 write_cmd = '\nwrite_srf'
+                sim_source = DEFAULT_SOURCE.copy()
                 for key, vals in params_dict.items():
-                    write_cmd += ' -%s %s' % (key, vals[sim_idx])
+                    sim_source[key] = vals[j]
+                    write_cmd += ' -%s %s' % (key, vals[j])
+                write_cmd += ' -mu %s' % self.get_local_shear_modulus(
+                    sim_source['lon'], sim_source['lat'], sim_source['depth'])
                 data.append(write_cmd)
                 data.append(
                     '\nrconv -i source.srf -o source.nrf -m "+proj=utm '
                     '+zone=11 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"')
+                data.append('\ncp ../../%s .' % self.par_file)
+                data.append('\nmkdir output')
                 data.append('\nmpiexec -n $SLURM_NTASKS %s %s' % (
-                    seissol_exe, self.par_file))
+                    seissol_exe, '../../%s' % self.par_file))
+                with open(self.par_file, 'r') as f:
+                    lines = f.readlines()
+                samp_line = [s for s in lines if 'pickdt' in s][0]
+                samp_rate = 1 / float(samp_line[0].split('=')[1].split('!')[0])
                 data.append(
-                    '\ncompute_pgv output ../../receivers.dat 1.0 4 10.0'
-                    ' 48 -plot')
+                    '\ncompute_pgv output ../../receivers.dat %s %s -plot' % (
+                        self.filt_freq, samp_rate))
                 data.append('\ncd ..')
             with open(os.path.join(
                     job_dir, 'job%s' % jobidx), 'w') as myfile:
@@ -172,6 +186,10 @@ class SeisSolSimulator():
                 self.receiver_file]:
             shutil.copyfile(file, os.path.join(folder, file))
 
+        datadir = os.path.join(folder, 'data')
+        if not os.path.exists(datadir):
+            os.makedirs(datadir)
+
     def get_local_shear_modulus(self, lon, lat, depth):
         try:
             fname = 'rhomulambda-inner.nc'
@@ -188,7 +206,7 @@ class SeisSolSimulator():
             utmx, utmy = transformer.transform(lon, lat)
             return float(interp((-depth, utmy, utmx)))
         except FileNotFoundError:
-            if depth <= 10.0e3:
+            if depth <= 1.0e3:
                 return 1.04e10
             else:
                 return 3.23980992e10

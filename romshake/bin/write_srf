@@ -2,24 +2,7 @@
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
-
-default = {
-    'mw': 5.44,
-    'tini': 0.0,
-    'sd': 1.0e6,
-    'lat': 33.949,
-    'lon': -117.766,
-    'depth': 5.0,
-    'strike': 0.0,
-    'dip': 90.0,
-    'rake': 0.0,
-    'mu': 1.0e10,
-    'fname': 'source.srf',
-    'plot': False,
-    'vs': 3464.0,
-    'dt': 0.001,
-    'tmax': 10.0,
-    'k': 0.32}
+from romshake.simulators.seissol_simulate import DEFAULT_SOURCE
 
 
 def mw_to_m0(mw):
@@ -44,12 +27,10 @@ def write_standard_rupture_format(
     area_m2 = m0 / (mu * slip)
     area_cm2 = area_m2 * 10000
 
-    vtime = np.arange(0, 4, dt)
-
     slip_cm = slip * 100
     sliprate_cm = slip_cm * t * np.exp(-t / T) / T**2
 
-    nt1 = vtime.shape[0]
+    nt1 = len(t)
     nt2 = 0
     nt3 = 0
 
@@ -100,8 +81,13 @@ def write_standard_rupture_format(
 def main():
     description = '''Writes standard rupture format from source parameters.'''
     parser = argparse.ArgumentParser(description=description)
-    for key, val in default.items():
-        parser.add_argument('-%s' % key, default=val)
+    for key, val in DEFAULT_SOURCE.items():
+        if key == 'fname':
+            parser.add_argument('-%s' % key, default=val, type=str)
+        elif key == 'plot':
+            parser.add_argument('-%s' % key, action='store_true', default=val)
+        else:
+            parser.add_argument('-%s' % key, default=val, type=float)
     args = vars(parser.parse_args())
     write_standard_rupture_format(**args)
 

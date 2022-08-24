@@ -35,10 +35,13 @@ def main():
     parser.add_argument('fin', help='Input folder', type=str)
     parser.add_argument('rec', help='Receiver file', type=str)
     parser.add_argument('freq', help='Low-pass filter frequency', type=float)
-    parser.add_argument('filt_order', help='Filter order', type=int)
     parser.add_argument('fs', help='Receiver sampling rate', type=float)
-    parser.add_argument('nproc', help='Number of processes', type=int)
-    parser.add_argument('-plot', help='Make plot', action='store_true', default=False)
+    parser.add_argument(
+        '-filt_order', help='Filter order', type=int, default=4)
+    parser.add_argument(
+        '-nproc', help='Number of processes', type=int, default=48)
+    parser.add_argument(
+        '-plot', help='Make plot', action='store_true', default=False)
     args = parser.parse_args()
 
     allfiles = sorted(glob.glob('%s/*receiver*' % args.fin))
