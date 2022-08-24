@@ -43,6 +43,8 @@ class SeisSolSimulator():
         self.gmsh_mesh_file = '%s.msh2' % self.prefix
         self.puml_mesh_file = '%s.puml.h5' % self.prefix
         self.material_file = 'material.yaml'
+        self.receiver_file = 'receivers.dat'
+        self.coords = np.genfromtxt(self.receiver_file)
         self.mesh_coords = mesh_coords
 
     def load_data(self, folder, indices):
@@ -69,10 +71,10 @@ class SeisSolSimulator():
         return (np.array([]), np.array([]))
 
     def plot_snapshot(
-            self, ax, snap, vmin, vmax, title, cmap, coords, **kwargs):
+            self, ax, snap, vmin, vmax, title, cmap, **kwargs):
         im = ax.tricontourf(
-            coords.T[0],
-            coords.T[1],
+            self.coords.T[0],
+            self.coords.T[1],
             snap, vmin=vmin, vmax=vmax, cmap=cmap)
         ax.set_xlabel('Easting')
         ax.set_ylabel('Northing')
@@ -137,7 +139,9 @@ class SeisSolSimulator():
                     '+zone=11 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"')
                 data.append('\nmpiexec -n $SLURM_NTASKS %s %s' % (
                     seissol_exe, self.par_file))
-                data.append('\ncompute_pgv output receivers.dat 1.0 4 10.0 48 -plot')
+                data.append(
+                    '\ncompute_pgv output ../../receivers.dat 1.0 4 10.0'
+                    ' 48 -plot')
                 data.append('\ncd ..')
             with open(os.path.join(
                     job_dir, 'job%s' % jobidx), 'w') as myfile:
@@ -172,7 +176,8 @@ class SeisSolSimulator():
         with open(os.path.join(folder, self.par_file), 'wt') as f:
             f.write(data)
         for file in self.netcdf_files + [
-                self.gmsh_mesh_file, self.material_file, self.sim_job_file]:
+                self.gmsh_mesh_file, self.material_file, self.sim_job_file,
+                self.receiver_file]:
             shutil.copyfile(file, os.path.join(folder, file))
 
     def write_standard_rupture_format(
@@ -206,7 +211,7 @@ class SeisSolSimulator():
         np.savetxt(fout, sliprate_cm, fmt='%.18e')
         fout.close()
 
-    def get_local_shear_modulus(self, lat, lon, depth):
+    def get_local_shear_modulus(self, lon, lat, depth):
         try:
             fname = 'rhomulambda-inner.nc'
             data = nc.Dataset(fname, 'r')
@@ -216,7 +221,7 @@ class SeisSolSimulator():
             mu = data.variables['data'][:]['mu']
             interp = RegularGridInterpolator((z, y, x), mu)
             sProj = ('+proj=utm +zone=11 +ellps=WGS84 +datum=WGS84'
-                     '+units=m +no_defs')
+                     ' +units=m +no_defs')
             transformer = Transformer.from_crs(
                 'epsg:4326', sProj, always_xy=True)
             utmx, utmy = transformer.transform(lon, lat)
