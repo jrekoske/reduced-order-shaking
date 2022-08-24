@@ -13,18 +13,6 @@ from romshake.core.remote_controller import SLEEPY_TIME
 
 seissol_exe = 'SeisSol_Release_dskx_4_elastic'
 logging.getLogger('paramiko').setLevel(logging.WARNING)
-source_params = {
-    'M': 5.44,
-    'tini': 0.0,
-    'slip1_cm': 15.0,
-    'slip2_cm': 0.0,
-    'slip3_cm': 0.0,
-    'lat': 33.949,
-    'lon': -117.766,
-    'depth': 5.0,
-    'strike': 0.0,
-    'dip': 90.0,
-    'rake': 0.0}
 
 
 class SeisSolSimulator():
@@ -60,11 +48,11 @@ class SeisSolSimulator():
 
     def evaluate(self, params_dict, indices, folder, **kwargs):
         self.prepare_common_files(folder)
-        for i, sim_idx in enumerate(indices):
-            for param_label, param_vals in params_dict.items():
-                source_params[param_label] = param_vals[i]
-            self.write_source_files(folder, source_params, sim_idx)
-        job_indices = self.prepare_jobs(folder, indices)
+        # for i, sim_idx in enumerate(indices):
+        #     for param_label, param_vals in params_dict.items():
+        #         source_params[param_label] = param_vals[i]
+        #     self.write_source_files(folder, source_params, sim_idx)
+        job_indices = self.prepare_jobs(folder, indices, params_dict)
         self.sync_files(folder, self.remote.full_scratch_dir, False)
         self.make_puml_file(folder)
         self.remote.run_jobs(job_indices)
@@ -103,7 +91,7 @@ class SeisSolSimulator():
             os.path.join(folder, self.par_file),
             os.path.join(sim_dir, self.par_file))
 
-    def prepare_jobs(self, folder, indices):
+    def prepare_jobs(self, folder, indices, params_dict):
         logging.info('Preparing job files.')
         job_dir = os.path.join(folder, 'jobs')
         if os.path.exists(job_dir):
@@ -134,6 +122,10 @@ class SeisSolSimulator():
             data = [sub.replace('jobidx', jobidx) for sub in data]
             for sim_idx in sims_groups[i]:
                 data.append('\ncd %s' % sim_idx)
+                write_cmd = '\nwrite_srf'
+                for key, vals in params_dict.items():
+                    write_cmd += ' -%s %s' % (key, vals[sim_idx])
+                data.append(write_cmd)
                 data.append(
                     '\nrconv -i source.srf -o source.nrf -m "+proj=utm '
                     '+zone=11 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"')
@@ -179,37 +171,6 @@ class SeisSolSimulator():
                 self.gmsh_mesh_file, self.material_file, self.sim_job_file,
                 self.receiver_file]:
             shutil.copyfile(file, os.path.join(folder, file))
-
-    def write_standard_rupture_format(
-            self, lon, lat, depth, strike, dip, rake, M, tini, slip1_cm,
-            slip2_cm, slip3_cm, fname):
-
-        # Area calculation
-        total_slip_cm = np.sqrt(slip1_cm**2 + slip2_cm**2 + slip3_cm**2)
-        total_slip_m = total_slip_cm / 100
-        M0 = 10**(1.5 * M + 9.1)
-        mu = self.get_local_shear_modulus(lon, lat, depth)
-        area_m2 = M0 / (mu * total_slip_m)
-        area_cm2 = area_m2 * 10000
-
-        T = 0.1
-        dt = 0.0002
-        vtime = np.arange(0, 4, dt)
-        sliprate_cm = slip1_cm * 1/T**2 * vtime*np.exp(-vtime/T)
-
-        nt1 = vtime.shape[0]
-        nt2 = 0
-        nt3 = 0
-
-        fout = open(fname, 'w')
-        fout.write('1.0\n')
-        fout.write('POINTS 1\n')
-        fout.write("%.5e %.5e %f %f %f %.10e %f %f\n" %
-                   (lon, lat, depth, strike, dip, area_cm2, tini, dt))
-        fout.write("%f %f %d %f %d %f %d\n" %
-                   (rake, slip1_cm, nt1, slip2_cm, nt2, slip3_cm, nt3))
-        np.savetxt(fout, sliprate_cm, fmt='%.18e')
-        fout.close()
 
     def get_local_shear_modulus(self, lon, lat, depth):
         try:

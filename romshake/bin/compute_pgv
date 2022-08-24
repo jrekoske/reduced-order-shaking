@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+import glob
+import argparse
+import numpy as np
+from scipy import signal
+from functools import partial
+import matplotlib.pyplot as plt
+from multiprocessing import Pool
+
+
+def chunks(lst, n):
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
+
+def compute_pgv(files, filt_order, freq, fs):
+    alldata = []
+    for file in files:
+        alldata.append(np.genfromtxt(file, skip_header=5, usecols=[-3, -2]))
+    alldata = np.array(alldata)
+    sos = signal.butter(filt_order, freq, output='sos', fs=fs)
+    filt = signal.sosfilt(sos, alldata, axis=1)
+    thetas = np.radians(np.arange(0.0, 180.0, 1.0)).reshape(1, -1)
+    vx, vy = filt[:, :, 0], filt[:, :, 1]
+    newvx = vx.reshape(vx.shape[0], vx.shape[1], 1)
+    newvy = vy.reshape(vy.shape[0], vy.shape[1], 1)
+    res = newvx @ np.cos(thetas) + newvy @ np.sin(thetas)
+    pgv = np.percentile(res.max(axis=1), 50.0, axis=1)
+    return pgv
+
+
+def main():
+    description = '''Computes PGV from receiver data.'''
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument('fin', help='Input folder', type=str)
+    parser.add_argument('rec', help='Receiver file', type=str)
+    parser.add_argument('freq', help='Low-pass filter frequency', type=float)
+    parser.add_argument('filt_order', help='Filter order', type=int)
+    parser.add_argument('fs', help='Receiver sampling rate', type=float)
+    parser.add_argument('nproc', help='Number of processes', type=int)
+    parser.add_argument('-plot', help='Make plot', action='store_true', default=False)
+    args = parser.parse_args()
+
+    allfiles = sorted(glob.glob('%s/*receiver*' % args.fin))
+    x, y, z = np.genfromtxt('%s' % args.rec).T
+    with Pool(processes=args.nproc) as pool:
+        files_chunks = list(chunks(allfiles, args.nproc))
+        pgv = np.hstack(
+            pool.map(
+                partial(
+                    compute_pgv, filt_order=args.filt_order, freq=args.freq,
+                    fs=args.fs),
+                files_chunks))
+    np.save('pgv', pgv)
+
+    if args.plot:
+        plt.figure(figsize=(10, 4))
+        plt.subplot(1, 2, 1)
+        plt.tricontourf(x, y, pgv)
+        plt.colorbar(label='PGV (m/s)')
+        plt.subplot(1, 2, 2)
+        plt.tripcolor(x, y, pgv)
+        plt.colorbar(label='PGV (m/s')
+        plt.tight_layout()
+        plt.savefig('pgv.png', dpi=100)
+        plt.close('all')
+
+
+if __name__ == '__main__':
+    main()

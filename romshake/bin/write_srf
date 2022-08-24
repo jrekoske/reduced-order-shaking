@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+import argparse
+import numpy as np
+import matplotlib.pyplot as plt
+
+default = {
+    'mw': 5.44,
+    'tini': 0.0,
+    'sd': 1.0e6,
+    'lat': 33.949,
+    'lon': -117.766,
+    'depth': 5.0,
+    'strike': 0.0,
+    'dip': 90.0,
+    'rake': 0.0,
+    'mu': 1.0e10,
+    'fname': 'source.srf',
+    'plot': False,
+    'vs': 3464.0,
+    'dt': 0.001,
+    'tmax': 10.0,
+    'k': 0.32}
+
+
+def mw_to_m0(mw):
+    '''Converts Mw to M_0 (in N*m).'''
+    return 10**(1.5 * mw + 9.1)
+
+
+def write_standard_rupture_format(
+        lon, lat, depth, strike, dip, rake, mw, sd, tini, fname, mu,
+        plot, vs, dt, tmax, k):
+
+    t = np.arange(0, tmax, dt)
+
+    m0 = mw_to_m0(mw)
+
+    r = ((7 * m0) / (16 * sd))**(1/3)
+    area = np.pi * r**2
+    slip = m0 / (mu * area)
+    fc = k * vs / r
+    T = 1 / (2 * np.pi * fc)
+
+    area_m2 = m0 / (mu * slip)
+    area_cm2 = area_m2 * 10000
+
+    vtime = np.arange(0, 4, dt)
+
+    slip_cm = slip * 100
+    sliprate_cm = slip_cm * t * np.exp(-t / T) / T**2
+
+    nt1 = vtime.shape[0]
+    nt2 = 0
+    nt3 = 0
+
+    fout = open(fname, 'w')
+    fout.write('1.0\n')
+    fout.write('POINTS 1\n')
+    fout.write("%.5e %.5e %f %f %f %.10e %f %f\n" %
+               (lon, lat, depth, strike, dip, area_cm2, tini, dt))
+    fout.write("%f %f %d %f %d %f %d\n" %
+               (rake, slip_cm, nt1, 0.0, nt2, 0.0, nt3))
+    np.savetxt(fout, sliprate_cm, fmt='%.18e')
+    fout.close()
+    print('Wrote to file %s' % fname)
+
+    if plot:
+        stf = (sliprate_cm / 100) * area_m2 * mu
+
+        f = np.fft.rfftfreq(len(stf), d=dt)
+        amp = abs(np.fft.rfft(stf))
+
+        plt.figure(figsize=(9, 4))
+        plt.subplot(1, 2, 1)
+        plt.plot(
+            t, stf, label='$\Delta\sigma=$%.1f MPa\n$f_c=$%.2f Hz\n'  # NOQA
+            'area$=%.2f$ km$^2$\nslip$=$%.2f m' %
+            (sd / 1e6, fc, area / 1e6, slip))
+        plt.xlabel('Time (s)')
+        plt.ylabel('Moment rate (N$\cdot$m/s)')  # NOQA
+        plt.xlim(0, tmax)
+        plt.title('Source-time function')
+        plt.legend(fontsize=10)
+
+        plt.subplot(1, 2, 2)
+        plt.loglog(f, amp)
+        plt.xlim(1e-2, 1e1)
+        plt.ylim(1e17)
+        plt.axvline(fc, c='k', ls='--')
+        plt.xlabel('Frequency (Hz)')
+        plt.ylabel('Amplitude')
+        plt.title('Amplitude spectrum')
+
+        plt.tight_layout()
+        plt.savefig('source.pdf')
+        plt.close('all')
+        print('Saved image to source.pdf')
+
+
+def main():
+    description = '''Writes standard rupture format from source parameters.'''
+    parser = argparse.ArgumentParser(description=description)
+    for key, val in default.items():
+        parser.add_argument('-%s' % key, default=val)
+    args = vars(parser.parse_args())
+    write_standard_rupture_format(**args)
+
+
+if __name__ == '__main__':
+    main()
