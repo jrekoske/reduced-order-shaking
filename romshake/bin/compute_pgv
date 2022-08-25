@@ -14,10 +14,21 @@ def chunks(lst, n):
 
 
 def compute_pgv(files, filt_order, freq, fs):
-    alldata = []
+    x, y, alldata = [], [], []
     for file in files:
         alldata.append(np.genfromtxt(file, skip_header=5, usecols=[-3, -2]))
+        fp = open(file, 'r')
+        for i, line in enumerate(fp):
+            if i == 2:
+                x.append(float(line.split(' ')[-1]))
+            elif i == 3:
+                y.append(float(line.split(' ')[-1]))
+            elif i > 3:
+                break
+        fp.close()
     alldata = np.array(alldata)
+    x = np.array(x)
+    y = np.array(y)
     sos = signal.butter(filt_order, freq, output='sos', fs=fs)
     filt = signal.sosfilt(sos, alldata, axis=1)
     thetas = np.radians(np.arange(0.0, 180.0, 1.0)).reshape(1, -1)
@@ -25,15 +36,14 @@ def compute_pgv(files, filt_order, freq, fs):
     newvx = vx.reshape(vx.shape[0], vx.shape[1], 1)
     newvy = vy.reshape(vy.shape[0], vy.shape[1], 1)
     res = newvx @ np.cos(thetas) + newvy @ np.sin(thetas)
-    pgv = np.percentile(res.max(axis=1), 50.0, axis=1)
-    return pgv
+    pgv = np.percentile(abs(res).max(axis=1), 50.0, axis=1)
+    return (x, y, pgv)
 
 
 def main():
     description = '''Computes PGV from receiver data.'''
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument('fin', help='Input folder', type=str)
-    parser.add_argument('rec', help='Receiver file', type=str)
     parser.add_argument('freq', help='Low-pass filter frequency', type=float)
     parser.add_argument('fs', help='Receiver sampling rate', type=float)
     parser.add_argument(
@@ -45,15 +55,14 @@ def main():
     args = parser.parse_args()
 
     allfiles = sorted(glob.glob('%s/*receiver*' % args.fin))
-    x, y, z = np.genfromtxt('%s' % args.rec).T
     with Pool(processes=args.nproc) as pool:
         files_chunks = list(chunks(allfiles, args.nproc))
-        pgv = np.hstack(
-            pool.map(
-                partial(
-                    compute_pgv, filt_order=args.filt_order, freq=args.freq,
-                    fs=args.fs),
-                files_chunks))
+        res = np.array(pool.map(
+            partial(
+                compute_pgv, filt_order=args.filt_order, freq=args.freq,
+                fs=args.fs),
+            files_chunks))
+        x, y, pgv = np.hstack(res)
     np.save('pgv', pgv)
 
     if args.plot:
