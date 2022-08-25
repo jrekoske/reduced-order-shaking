@@ -206,7 +206,4 @@ class SeisSolSimulator():
             utmx, utmy = transformer.transform(lon, lat)
             return float(interp((-depth * 1000, utmy, utmx)))
         except FileNotFoundError:
-            if depth <= 1.0e3:
-                return 1.04e10
-            else:
-                return 3.23980992e10
+            return 3.23980992e10
