@@ -144,7 +144,7 @@ class SeisSolSimulator():
                 with open(self.par_file, 'r') as f:
                     lines = f.readlines()
                 samp_line = [s for s in lines if 'pickdt' in s][0]
-                samp_rate = 1 / float(samp_line[0].split('=')[1].split('!')[0])
+                samp_rate = 1 / float(samp_line.split('=')[1].split('!')[0])
                 data.append(
                     '\ncompute_pgv output ../../receivers.dat %s %s -plot' % (
                         self.filt_freq, samp_rate))
@@ -204,7 +204,7 @@ class SeisSolSimulator():
             transformer = Transformer.from_crs(
                 'epsg:4326', sProj, always_xy=True)
             utmx, utmy = transformer.transform(lon, lat)
-            return float(interp((-depth, utmy, utmx)))
+            return float(interp((-depth * 1000, utmy, utmx)))
         except FileNotFoundError:
             if depth <= 1.0e3:
                 return 1.04e10

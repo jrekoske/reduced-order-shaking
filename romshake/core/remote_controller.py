@@ -4,7 +4,7 @@ import logging
 import paramiko
 import subprocess
 
-SLEEPY_TIME = 300  # Time to wait between calls (seconds)
+SLEEPY_TIME = 60  # Time to wait between calls (seconds)
 
 
 class RemoteController():
@@ -52,6 +52,10 @@ class RemoteController():
             if all(finished):
                 jobs_finished = True
                 logging.info('Jobs all finished.')
+            else:
+                logging.info(
+                    'Jobs are still running. Checking again in %s seconds.' %
+                    SLEEPY_TIME)
 
 
 def copy_file(source, dest):
