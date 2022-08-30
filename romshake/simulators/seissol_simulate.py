@@ -36,6 +36,7 @@ PGV_FILE = 'pgv.npy'
 
 
 class SeisSolSimulator():
+    """Class for producing PGV simulation estimates using SeisSol."""
     def __init__(self, par_file, sim_job_file, prefix,
                  max_jobs, t_per_sim, t_max_per_job, take_log_imt, filt_freq,
                  remote=None, netcdf_files=[]):
@@ -56,6 +57,15 @@ class SeisSolSimulator():
         self.filt_freq = filt_freq
 
     def load_data(self, folder, indices):
+        """Loads the generated data into a single numpy array.
+
+        Args:
+            folder (str): Folder path.
+            indices (list): List of indices (integers) to load data.
+
+        Returns:
+            numpy.ndarray: Numpy array of the generated data.
+        """
         logging.info('Loading data.')
         all_data = []
         for sim_idx in indices:
@@ -67,6 +77,16 @@ class SeisSolSimulator():
         return np.array(all_data).T
 
     def evaluate(self, params_dict, indices, folder, **kwargs):
+        """Prepares and runs the jobs to produce PGV estimates.
+
+        Args:
+            params_dict (dict): Dictionary of the parameters and values.
+            indices (list): List of indices (integers).
+            folder (str): Folder path.
+
+        Returns:
+            tuple: Returns empty tuple.
+        """
         self.prepare_common_files(folder)
         job_indices = self.prepare_jobs(folder, indices, params_dict)
         self.sync_files(folder, self.remote.full_scratch_dir, False)
@@ -76,6 +96,16 @@ class SeisSolSimulator():
 
     def plot_snapshot(
             self, ax, snap, vmin, vmax, title, cmap, **kwargs):
+        """Plots a single snapshot.
+
+        Args:
+            ax (matplotlib.axes): Matplotlib axis.
+            snap (numpy.ndarray): Data array.
+            vmin (float): Minimum value for colorbar.
+            vmax (float): Maximum value for colorbar.
+            title (str): Plot title.
+            cmap (str): Matplotlib colormap string.
+        """
         im = ax.tricontourf(
             self.coords.T[0],
             self.coords.T[1],
@@ -86,6 +116,10 @@ class SeisSolSimulator():
         plt.colorbar(im, ax=ax, label='log(PGV)')
 
     def make_puml_file(self, folder):
+        """Creates the PUML mesh file using pumgen.
+        Args:
+            folder (str): Folder path.
+        """
         wdir = '%s%s' % (self.remote.scratch_dir, folder)
         if self.puml_mesh_file not in str(
                 self.remote.issue_remote_command('ls %s' % wdir)):
@@ -95,6 +129,16 @@ class SeisSolSimulator():
                     wdir, self.gmsh_mesh_file))
 
     def prepare_jobs(self, folder, indices, params_dict):
+        """Prepares the job files for submissions.
+
+        Args:
+            folder (str): Folder path.
+            indices (list): List of indices (ints).
+            params_dict (dict): Dictionary of parameters/values.
+
+        Returns:
+            list: List of indices.
+        """
         logging.info('Preparing job files.')
         job_dir = os.path.join(folder, 'jobs')
         if os.path.exists(job_dir):
@@ -160,6 +204,14 @@ class SeisSolSimulator():
         return range(startidx, startidx + njobs)
 
     def sync_files(self, source, dest, exclude_output):
+        """Syncs files with the remote system.
+
+        Args:
+            source (str): Source path.
+            dest (str): Destintion path.
+            exclude_output (bool): If True, excludes the output directory
+                from the sync.
+        """
         exclude_file = os.path.join(
             os.path.split(inspect.getfile(self.__class__))[0], 'exclude.txt')
         logging.info('Syncing files. Source: %s, Destination: %s' % (
@@ -175,10 +227,25 @@ class SeisSolSimulator():
             time.sleep(SLEEPY_TIME)
 
     def get_successful_indices(self, folder, indices):
+        """Returns a list of the indices that were run successfully.
+
+        Args:
+            folder (str): Folder path
+            indices (_type_): List of indices (ints).
+
+        Returns:
+            list: List of successful indices.
+        """
         return [idx for idx in indices if os.path.exists(os.path.join(
             folder, 'data', str(idx), 'pgv.npy'))]
 
     def prepare_common_files(self, folder):
+        """Prepares the common files for all simulations, including the
+        material, mesh, netCDF, job, and receiver files.
+
+        Args:
+            folder (str): Folder path.
+        """
         with open(self.par_file, 'rt') as f:
             data = f.read()
             data = data.replace('material_file_name', self.material_file)
@@ -195,6 +262,16 @@ class SeisSolSimulator():
             os.makedirs(datadir)
 
     def get_local_shear_modulus(self, lon, lat, depth):
+        """Returns the local shear modulus at the earthquake source location.
+
+        Args:
+            lon (float): Longitude (decimal degrees).
+            lat (float): Latitude (decimal degrees).
+            depth (float): Depth (km)
+
+        Returns:
+            float: Local shear modulus (in Pa).
+        """        
         try:
             fname = 'rhomulambda-inner.nc'
             data = nc.Dataset(fname, 'r')

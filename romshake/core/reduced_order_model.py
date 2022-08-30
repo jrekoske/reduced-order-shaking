@@ -25,11 +25,14 @@ class ReducedOrderModel():
         """Class for encapsulating reduced order model information.
 
         Args:
-            parameters (dict, optional): Dictionary of parameters
-                for grid search of ML hyperparameters.
+            regressors (dict): Dictionary of scikit learn regressors and
+                hyperparameters to test.
+            svd_ncomps (list): List of number of basis vectors (rank) to test
+                for the ROM.
             test_size (float): Fraction of data (forward models) to
                 holdout from training.
-            scoring (str): Scorer string (scikit-learn).
+            scoring (str): Scorer string (from scikit-learn).
+            folder (str): Folder associated with ROM data.
             remote (object, optional): Remote controller object.
         """
         self.hyper_params = []
@@ -55,6 +58,9 @@ class ReducedOrderModel():
         Args:
             newX (array): New parameter array.
             newy (array): New data array.
+            use_remote (bool): If True, updates the ROM on the remote system.
+            append (bool): If True, appends the new data to existing data.
+                Otherwise, the ROM is recreated with the new data.
         """
         if use_remote:
             return self.launch_remote_grid_search()
@@ -69,6 +75,8 @@ class ReducedOrderModel():
             return self
 
     def train_search_models(self):
+        """Trains the ROM by performing a grid search over the
+        hyperparameters."""
         self.X_train, self.X_test, self.y_train, self.y_test = \
             train_test_split(
                 self.X, self.y, test_size=self.test_size)
@@ -93,6 +101,7 @@ class ReducedOrderModel():
         memory.clear(warn=False)
 
     def launch_remote_grid_search(self):
+        """Launches the grid search on the remote system."""
         job_dir = os.path.join(self.folder, 'jobs')
         if os.path.exists(job_dir):
             jobfiles = [file for file in os.listdir(job_dir) if 'job' in file]

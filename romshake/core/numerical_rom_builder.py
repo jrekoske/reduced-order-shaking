@@ -29,19 +29,19 @@ class NumericalRomBuilder():
                 new data from parameters. Can be either analytic or launch
                 numerical simulation jobs.
             rom (object): Reduced order model object.
-            remote (object): Remote controller object.
             n_seeds_initial (int): Number of seeds for the first iteration.
             n_seeds_refine (int): Number of seeds to generate with each
                 iteration.
-            n_cells_refine (int): Number of Voronoi cells to sample with
-                each iteration (if using Voronoi sampling strategy).
             n_seeds_stop (int): Maximum number of seeds.
             samp_method (str): Sampling refinement strategy.
             bounds (dict): Min/max values for the parameter space.
-            clear (bool, optional): If True, will remove all pre-existing
-                data from the folder.
             desired_score (float): Desired score (stopping condition).
+            remote (object): Remote controller object.
             make_test_figs (bool): Plot snapshots of testing predictions.
+            n_cells_refine (int): Number of Voronoi cells to sample with
+                each iteration (if using Voronoi sampling strategy).
+            use_remote (bool): If True, use remote system for training
+                the reduced order model.
         """
 
         self.folder = folder
@@ -165,6 +165,9 @@ class NumericalRomBuilder():
             self.rom.X.shape[0])
 
     def save_results(self):
+        """Save the results by saving the grid search CSV file
+        and plotting the score history as a function of the number
+        of forward models."""
         nseeds = self.rom.X.shape[0]
         odir = os.path.join(self.folder, str(nseeds))
         if not os.path.exists(odir):
@@ -190,6 +193,8 @@ class NumericalRomBuilder():
         self.plot_score_history()
 
     def plot_score_history(self):
+        """Plots the score history as a function of the number
+        of forward models."""
         plt.plot(self.nsamples_history, self.score_history, '-ko')
         plt.axhline(self.desired_score, c='k', ls='--', lw=0.5)
         plt.xlabel('Number of samples')
@@ -198,6 +203,8 @@ class NumericalRomBuilder():
         plt.close()
 
     def plot_predictions(self, odir):
+        """Produces a series of figures plotting the simulation and
+        predicted data from the testing dataset."""
         data = [self.rom.y_test, self.rom.y_pred,
                 self.rom.y_test - self.rom.y_pred]
         titles = ['Truth', 'Predicted', 'Error']

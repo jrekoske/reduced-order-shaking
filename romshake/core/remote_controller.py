@@ -4,10 +4,11 @@ import logging
 import paramiko
 import subprocess
 
-SLEEPY_TIME = 60  # Time to wait between calls (seconds)
+SLEEPY_TIME = 300  # Time to wait between calls (seconds)
 
 
 class RemoteController():
+    """Class for managing the remote system and launching jobs."""
     def __init__(self, host, user, scratch_dir, grid_search_job_file, folder,
                  grid_search_script):
         self.host = host
@@ -20,6 +21,7 @@ class RemoteController():
         self.remote_wdir = '%s@%s:%s%s' % (user, host, scratch_dir, folder)
 
     def issue_remote_command(self, cmd):
+        """Issues a command (cmd) on the remote system."""
         done = False
         while not done:
             try:
@@ -38,6 +40,7 @@ class RemoteController():
         return stdout.readlines()
 
     def run_jobs(self, job_indices):
+        """Runs jobs on the remote system."""
         job_dir = os.path.join(self.scratch_dir, self.folder, 'jobs')
         cmd = ('cd %s; for i in $(seq %s %s); do sbatch job$i; done' % (
             job_dir, min(job_indices), max(job_indices)))
