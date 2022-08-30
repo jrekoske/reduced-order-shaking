@@ -108,7 +108,11 @@ class SeisSolSimulator():
         nsims = len(indices)
         njobs = max(self.max_jobs, nsims * self.t_per_sim / self.t_max_per_job)
         njobs = min(nsims, njobs)
+
         sims_groups = np.array_split(indices, njobs)
+        params_groups = np.array_split(
+            np.array(list(params_dict.values())).T, njobs)
+        param_keys = params_dict.keys()
 
         # Create and populate the job files
         with open(os.path.join(folder, self.sim_job_file), 'r') as myfile:
@@ -128,9 +132,9 @@ class SeisSolSimulator():
                 data.append('\ncd %s' % sim_idx)
                 write_cmd = '\nwrite_srf'
                 sim_source = DEFAULT_SOURCE.copy()
-                for key, vals in params_dict.items():
-                    sim_source[key] = vals[j]
-                    write_cmd += ' -%s %s' % (key, vals[j])
+                for k, key in enumerate(param_keys):
+                    sim_source[key] = params_groups[i][j][k]
+                    write_cmd += ' -%s %s' % (key, sim_source[key])
                 write_cmd += ' -mu %s' % self.get_local_shear_modulus(
                     sim_source['lon'], sim_source['lat'], sim_source['depth'])
                 data.append(write_cmd)
